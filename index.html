@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>Holo Stage</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-setup" viewBox="0 0 24 24"><path d="M4 7h9M19 7h1M4 17h1M11 17h9"/><circle cx="16" cy="7" r="2.5"/><circle cx="8" cy="17" r="2.5"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+      <symbol id="i-next" viewBox="0 0 24 24"><path d="M6 5l9 7-9 7zM18 5v14"/></symbol>
+      <symbol id="i-prev" viewBox="0 0 24 24"><path d="M18 5l-9 7 9 7zM6 5v14"/></symbol>
+      <symbol id="i-restart" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.4-5.5M4 4v4.5h4.5"/></symbol>
+      <symbol id="i-up" viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></symbol>
+      <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 12.5h8L17 7"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M5 15.5V6a1.5 1.5 0 0 1 1.500-1.500H15"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-film" viewBox="0 0 24 24"><rect x="3.500" y="5" width="17" height="14" rx="2.500"/><path d="M10 9.200l5 2.800-5 2.800z"/></symbol>
+      <symbol id="i-together" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.500"/><circle cx="12" cy="3.800" r="1.300"/><circle cx="20.200" cy="12" r="1.300"/><circle cx="12" cy="20.200" r="1.300"/><circle cx="3.800" cy="12" r="1.300"/></symbol>
+      <symbol id="i-quiz" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M9.700 9.600a2.400 2.400 0 1 1 3.500 2.100c-.8.400-1.200 1-1.200 1.800M12 16.400v.1"/></symbol>
+      <symbol id="i-turns" viewBox="0 0 24 24"><path d="M16.500 3.500l3 3-3 3M4.500 11V8.500a2 2 0 0 1 2-2h13M7.500 20.500l-3-3 3-3M19.500 13v2.500a2 2 0 0 1-2 2h-13"/></symbol>
+      <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+      <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4l10.5-10.5a2 2 0 0 0-4-4L4 16v4z"/></symbol>
+    </defs>
+  </svg>
+
+  <!-- Display: square stage with four tiles in a cross, one per pyramid face -->
+  <main id="stage" aria-label="Hologram stage" data-i18n-aria="ariaStage"></main>
+
+  <!-- Guide controls: appear on pointer movement or a tap/hold in the top-left corner -->
+  <div id="cornerHold" class="corner-hold" aria-hidden="true">
+    <svg viewBox="0 0 36 36"><circle class="track" cx="18" cy="18" r="14"/><circle class="fill" cx="18" cy="18" r="14" pathLength="1" transform="rotate(-90 18 18)"/></svg>
+  </div>
+  <div id="transport" class="transport" role="toolbar" aria-label="Guide controls" data-i18n-aria="ariaGuideControls">
+    <button id="gear" title="Setup (F1)" aria-label="Open setup" data-i18n-title="setupTitle" data-i18n-aria="openSetupAria"><svg class="ic"><use href="#i-setup"/></svg></button>
+    <button id="tRestart" class="t-story" title="Back to the start (Home)" aria-label="Back to the start" data-i18n-title="restartTitle" data-i18n-aria="restartAria"><svg class="ic"><use href="#i-restart"/></svg></button>
+    <button id="tPrev" class="t-story" title="Previous scene (←)" aria-label="Previous scene" data-i18n-title="prevTitle" data-i18n-aria="prevAria"><svg class="ic"><use href="#i-prev"/></svg></button>
+    <button id="tPause" class="t-story" title="Pause (P)" aria-label="Pause" data-i18n-title="pauseTitle" data-i18n-aria="pauseAria"><svg class="ic"><use href="#i-pause"/></svg></button>
+    <button id="tNext" class="t-story" title="Next scene (→)" aria-label="Next scene" data-i18n-title="nextTitle" data-i18n-aria="nextAria"><svg class="ic"><use href="#i-next"/></svg></button>
+    <div id="tLang" class="lang-switch t-lang" role="group" aria-label="Language" data-i18n-aria="langAria">
+      <button type="button" data-lang="de">DE</button><button type="button" data-lang="it">IT</button><button type="button" data-lang="en">EN</button>
+    </div>
+    <div id="tStatus" class="t-status t-story" aria-live="polite"></div>
+  </div>
+
+  <aside id="panel" class="panel" aria-label="Setup" data-i18n-aria="setupAria" hidden>
+    <header class="panel-head">
+      <div class="row spread">
+        <h1>Holo Stage</h1>
+        <div class="row">
+          <div id="panelLang" class="lang-switch" role="group" aria-label="Language" data-i18n-aria="langAria">
+            <button type="button" data-lang="de">DE</button><button type="button" data-lang="it">IT</button><button type="button" data-lang="en">EN</button>
+          </div>
+          <button id="btnInstall" hidden data-i18n="installApp">Install app</button>
+          <button id="btnFullscreen" class="primary"><svg class="ic"><use href="#i-full"/></svg><span data-i18n="playFullscreen">Play fullscreen</span></button>
+          <button id="btnTour" class="icon tour-btn" aria-label="Show the tutorial" title="Tutorial" data-i18n-aria="tourOpenAria" data-i18n-title="tourOpenTitle">?</button>
+          <button id="btnClose" class="icon" aria-label="Close setup" title="Close setup (F1)" data-i18n-aria="closeSetupAria" data-i18n-title="closeSetupTitle"><svg class="ic"><use href="#i-close"/></svg></button>
+        </div>
+      </div>
+      <nav class="tabs" role="tablist" aria-label="Setup sections" data-i18n-aria="tabsAria">
+        <button role="tab" id="tab-btn-story" data-tab="story" aria-controls="tab-story" aria-selected="true" tabindex="0" data-i18n="tabStory">Story</button>
+        <button role="tab" id="tab-btn-buttons" data-tab="buttons" aria-controls="tab-buttons" aria-selected="false" tabindex="-1" data-i18n="tabButtons">Buttons</button>
+        <button role="tab" id="tab-btn-videos" data-tab="videos" aria-controls="tab-videos" aria-selected="false" tabindex="-1" data-i18n="tabVideos">Videos</button>
+        <button role="tab" id="tab-btn-setup" data-tab="setup" aria-controls="tab-setup" aria-selected="false" tabindex="-1" data-i18n="tabSetup">Pyramid</button>
+      </nav>
+    </header>
+
+    <!-- ------------------------------------------------------------ Story -->
+    <section class="tab" id="tab-story" role="tabpanel" aria-labelledby="tab-btn-story" tabindex="0">
+      <div id="storyEmpty" class="empty" hidden>
+        <h2 class="plain" data-i18n="emptyTitle">Tell a story in the pyramid</h2>
+        <p data-i18n-html="emptyBodyHtml">A story is a row of scenes. <b>Animations</b> play by themselves. In between, the story stops and waits for the group: everyone holds their button <b>together</b>, agrees on a <b>quiz</b> answer, or <b>takes turns</b>.</p>
+        <div class="row">
+          <button class="primary" data-demo data-i18n="loadDemoStory">Load the volcano demo story</button>
+        </div>
+        <p class="hint" data-i18n-html="emptyHintHtml">Or add your videos under <i>Videos</i> and build your own below.</p>
+      </div>
+
+      <div id="storyMeta">
+        <div class="seg" role="radiogroup" aria-label="What the pyramid runs" data-i18n-aria="runModeAria">
+          <label><input type="radio" name="runMode" value="story"> <span data-i18n="modeStory">Story</span></label>
+          <label><input type="radio" name="runMode" value="free"> <span data-i18n="modeFree">Free play</span></label>
+        </div>
+        <p class="hint" id="modeHint"></p>
+        <div class="grid">
+          <label><span data-i18n="storyTitle">Story title</span> <input id="sTitle" placeholder="Shown on the start screen" data-i18n-placeholder="storyTitlePlaceholder"></label>
+          <label><span data-i18n="attractClip">Start screen clip</span> <select id="sAttract"></select></label>
+        </div>
+      </div>
+
+      <h2 data-i18n="scenes">Scenes</h2>
+      <ol id="scenes" class="scenes"></ol>
+      <div class="add-scene">
+        <span class="hint" data-i18n="addScene">Add a scene</span>
+        <div class="row" id="addScene"></div>
+      </div>
+
+      <details class="more">
+        <summary data-i18n="timingAndWording">Timing and wording</summary>
+        <div class="grid">
+          <label><span data-i18n="joinSeconds">Wait for others to join (s)</span> <input id="sJoin" type="number" min="1" max="60" step="1"></label>
+          <label><span data-i18n="idleReset">Back to start when nobody presses (s, 0 = never)</span> <input id="sIdle" type="number" min="0" max="600" step="5"></label>
+        </div>
+        <p class="hint" id="sWordsHint">The words the pyramid itself uses. Change them to your language. <code>{name}</code> is the player’s name.</p>
+        <div class="grid" id="sWords"></div>
+      </details>
+    </section>
+
+    <!-- ------------------------------------------------------------ Buttons -->
+    <section class="tab" id="tab-buttons" role="tabpanel" aria-labelledby="tab-btn-buttons" tabindex="0" hidden>
+      <h2 data-i18n="liveInput">Live input</h2>
+      <p class="hint" data-i18n="liveInputHint">Press any key, gamepad or arcade button to see what the app receives.</p>
+      <div id="lastInput" class="last-input">—</div>
+
+      <h2 data-i18n="playersHeading">Players</h2>
+      <p class="hint" data-i18n="playersHint">One player per pyramid face. Give each the color of their physical button: the hologram uses it to show who is who.</p>
+      <div id="players" class="players"></div>
+    </section>
+
+    <!-- ------------------------------------------------------------ Videos -->
+    <section class="tab" id="tab-videos" role="tabpanel" aria-labelledby="tab-btn-videos" tabindex="0" hidden>
+      <h2 data-i18n="videoLibrary">Video library</h2>
+      <div class="row">
+        <label class="button primary"><span data-i18n="addVideos">Add video…</span><input id="fileInput" type="file" accept="video/*" hidden></label>
+        <button data-demo data-i18n="loadVolcanoDemo">Load volcano demo</button>
+      </div>
+      <p class="hint" data-i18n="videosHint">Drop video files anywhere on this panel. Videos are stored in this browser, so they keep working offline. Use the plain, upright video on a black background. The app rotates and flips it for each face.</p>
+      <div id="libPreview" class="lib-preview" hidden>
+        <div class="row spread">
+          <span id="libPreviewName" class="name"></span>
+          <button id="libPreviewClose" class="icon" aria-label="Close preview" title="Close preview" data-i18n-aria="closePreview" data-i18n-title="closePreview"><svg class="ic"><use href="#i-close"/></svg></button>
+        </div>
+        <video id="libPreviewVideo" controls loop muted playsinline></video>
+      </div>
+      <ul id="library" class="library"></ul>
+      <input id="replaceInput" type="file" accept="video/*" hidden>
+      <p id="pendingClips" class="hint" hidden></p>
+      <p id="storage" class="hint"></p>
+    </section>
+
+    <!-- ------------------------------------------------------------ Pyramid -->
+    <section class="tab" id="tab-setup" role="tabpanel" aria-labelledby="tab-btn-setup" tabindex="0" hidden>
+      <h2 data-i18n="layoutHeading">Layout</h2>
+      <div class="grid">
+        <label><span data-i18n="tileSize">Tile size</span> <input id="lTile" type="range" min="0.15" max="0.5" step="0.005"><output></output></label>
+        <label><span data-i18n="centerHole">Center hole</span> <input id="lHole" type="range" min="0" max="0.6" step="0.005"><output></output></label>
+        <label><span data-i18n="edgeFade">Edge fade</span> <input id="lFeather" type="range" min="0" max="0.25" step="0.005"><output></output></label>
+        <label><span data-i18n="crossfadeMs">Crossfade (ms)</span> <input id="lFade" type="range" min="0" max="1500" step="50"><output></output></label>
+        <label><span data-i18n="orientation">Orientation</span>
+          <select id="lOrientation">
+            <option value="outward" data-i18n="orientOutward">Small end on screen (phone/tablet pyramid)</option>
+            <option value="inward" data-i18n="orientInward">Big end on screen (apex points up)</option>
+          </select>
+        </label>
+        <label><span data-i18n="rotateStage">Rotate stage</span>
+          <select id="lRotate">
+            <option value="0">0°</option><option value="90">90°</option>
+            <option value="180">180°</option><option value="270">270°</option>
+          </select>
+        </label>
+        <label class="check"><input id="lMirror" type="checkbox"> <span data-i18n="mirrorLR">Mirror left/right</span></label>
+        <label class="check"><input id="lTap" type="checkbox"> <span data-i18n="tapTrigger">Touching a tile presses its button</span></label>
+        <label class="check"><input id="lGuides" type="checkbox"> <span data-i18n="showGuides">Show alignment guides</span></label>
+        <label class="check"><input id="lKiosk" type="checkbox"> <span data-i18n="kioskLock">Exhibit lock (hold top-left corner to show controls)</span></label>
+        <label class="check"><input id="lSound" type="checkbox"> <span data-i18n="soundEffects">Sound effects</span></label>
+      </div>
+
+      <div id="buildSection">
+      <h2 data-i18n="buildHeading">Build the pyramid</h2>
+      <p class="hint" data-i18n="buildHint">Enter your screen size. The sizes follow the tile size and center hole above, so the pyramid fits the picture exactly.</p>
+      <div class="grid three">
+        <label><span data-i18n="screenDiag">Screen diagonal (inch)</span> <input id="bDiag" type="number" min="3" max="100" step="0.1" inputmode="decimal"></label>
+        <label><span data-i18n="screenRatio">Aspect ratio</span>
+          <select id="bRatio">
+            <option value="16:9">16:9</option><option value="16:10">16:10</option><option value="4:3">4:3</option>
+            <option value="3:2">3:2</option><option value="19.5:9">19.5:9</option><option value="20:9">20:9</option>
+          </select>
+        </label>
+        <label><span data-i18n="screenShort">Short side of the picture (mm)</span> <input id="bShort" type="number" min="40" max="1500" step="1" inputmode="decimal"></label>
+      </div>
+      <p class="hint" data-i18n="screenShortHint">Most accurate: measure the short side of the lit picture (without the frame) with a ruler and type it in.</p>
+      <div class="build">
+        <svg id="bPreview" class="build-preview" aria-hidden="true"></svg>
+        <dl id="bDims" class="build-dims"></dl>
+      </div>
+      <div class="row">
+        <button id="btnPrintTemplate" class="primary" data-i18n="printTemplate">Print cutting template</button>
+      </div>
+      <p class="hint" id="bSheet"></p>
+      <details class="more" id="bGuide">
+        <summary data-i18n="buildSteps">How to cut and assemble it</summary>
+        <ol id="bSteps" class="steps"></ol>
+      </details>
+      </div>
+
+      <h2 data-i18n="backupHeading">Backup</h2>
+      <div class="row" id="backupRow">
+        <button id="btnExport" data-i18n="exportBtn">Export story and settings</button>
+        <label class="button"><span data-i18n="importBtn">Import</span><input id="importInput" type="file" accept="application/json" hidden></label>
+        <button id="btnReset" class="danger" data-i18n="resetBtn">Reset everything</button>
+      </div>
+      <p class="hint" data-i18n="backupHint">The file contains the story, players, buttons and layout. It doesn’t contain the videos; on another device they are linked again by file name.</p>
+    </section>
+    <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+  </aside>
+
+  <template id="tplPlayer">
+    <article class="player">
+      <div class="row">
+        <input class="p-color" type="color" aria-label="Button color" data-i18n-aria="buttonColorAria">
+        <input class="p-name" aria-label="Player name" data-i18n-aria="playerNameAria">
+        <button class="p-test" data-i18n="testPress">Test press</button>
+      </div>
+      <div class="grid two">
+        <label><span data-i18n="pyramidFace">Pyramid face</span>
+          <select class="p-side">
+            <option value="bottom" data-i18n="sideBottom">Bottom (near edge)</option>
+            <option value="right" data-i18n="sideRight">Right</option>
+            <option value="top" data-i18n="sideTop">Top (far edge)</option>
+            <option value="left" data-i18n="sideLeft">Left</option>
+          </select>
+        </label>
+        <div class="binding">
+          <span><span data-i18n="buttonLabel">Button</span> <b class="p-binding">none</b></span>
+          <div class="row">
+            <button class="p-learn" data-i18n="assignButton">Assign button</button>
+            <button class="p-unbind" title="Remove button" data-i18n="clear" data-i18n-title="removeButtonTitle">Clear</button>
+          </div>
+        </div>
+        <label><span data-i18n="faceLang">Face language</span>
+          <select class="p-lang">
+            <option value="" data-i18n="faceLangApp">Same as app</option>
+            <option value="de">Deutsch</option>
+            <option value="it">Italiano</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+      </div>
+      <details class="more">
+        <summary data-i18n="freePlayClips">Free play clips</summary>
+        <p class="hint" data-i18n-html="onlyFreePlayHtml">Only used in <i>Free play</i>, when no story runs.</p>
+        <label><span data-i18n="modeLabel">Mode</span>
+          <select class="p-mode">
+            <option value="trigger" data-i18n="modeTrigger">Trigger (idle loop, each press plays an action)</option>
+            <option value="cycle" data-i18n="modeCycle">Cycle (each press switches to the next clip)</option>
+          </select>
+        </label>
+        <label class="check"><input class="p-interrupt" type="checkbox"> <span data-i18n="interruptCheck">A press during an action restarts it right away</span></label>
+        <div class="label-edit">
+          <label><span data-i18n="infoLabel">Info label (shown in the hologram)</span>
+            <textarea class="p-ltext" rows="2" placeholder="e.g. Press your button to erupt!" data-i18n-placeholder="infoLabelPlaceholder"></textarea>
+          </label>
+          <div class="grid three">
+            <label><span data-i18n="position">Position</span>
+              <select class="p-lpos">
+                <option value="top" data-i18n="posTop">Top of clip</option>
+                <option value="middle" data-i18n="posMiddle">Middle</option>
+                <option value="bottom" data-i18n="posBottom">Bottom of clip</option>
+              </select>
+            </label>
+            <label><span data-i18n="show">Show</span>
+              <select class="p-lshow">
+                <option value="always" data-i18n="showAlways">Always</option>
+                <option value="idle" data-i18n="showIdle">Only while idle</option>
+                <option value="action" data-i18n="showAction">Only during action</option>
+              </select>
+            </label>
+            <label><span data-i18n="color">Color</span> <input class="p-lcolor" type="color"></label>
+          </div>
+          <label><span data-i18n="textSize">Text size</span> <input class="p-lsize" type="range" min="0.03" max="0.2" step="0.005"></label>
+        </div>
+        <ol class="p-clips"></ol>
+        <select class="p-add" aria-label="Add a clip to this player" data-i18n-aria="addClipToPlayerAria"></select>
+      </details>
+    </article>
+  </template>
+
+  <!-- First-run tutorial: a card that walks through the setup panel -->
+  <section id="tour" class="tour" role="dialog" aria-modal="false" aria-labelledby="tourTitle" hidden>
+    <div class="row spread">
+      <span id="tourCount" class="tour-count"></span>
+      <button id="tourSkip" class="tour-skip" data-i18n="tourSkip">Skip tutorial</button>
+    </div>
+    <h2 id="tourTitle" class="plain"></h2>
+    <div id="tourBody" class="tour-body"></div>
+    <div class="row spread">
+      <div id="tourDots" class="tour-dots" aria-hidden="true"></div>
+      <div class="row">
+        <button id="tourBack" data-i18n="tourBack">Back</button>
+        <button id="tourNext" class="primary" data-i18n="tourNext">Next</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Filled only while printing the cutting template; hidden on screen -->
+  <div id="printSheet" aria-hidden="true"></div>
+
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script src="story.js"></script>
+  <script src="ui.js"></script>
+</body>
+</html>

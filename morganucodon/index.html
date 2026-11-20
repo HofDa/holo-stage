@@ -1,0 +1,1333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Morganucodon — Interactive 3D Specimen</title>
+<style>
+  :root {
+    --bg: #07080a;
+    --panel: rgba(14, 16, 20, 0.78);
+    --border: rgba(255, 255, 255, 0.11);
+    --text: #eef0f3;
+    --muted: #9aa2b0;
+    --accent: #d99b52;
+    --accent-hi: #f0b86e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #000; color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    user-select: none; -webkit-user-select: none;
+  }
+  #glcanvas {
+    display: block; width: 100%; height: 100%;
+    cursor: grab; touch-action: none;
+  }
+  #glcanvas:active { cursor: grabbing; }
+
+  .hud {
+    position: fixed; inset: 0; pointer-events: none;
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: 18px 20px;
+    transition: opacity 220ms ease;
+  }
+  body.hud-hidden .hud { opacity: 0; pointer-events: none; }
+
+  .top-row {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  }
+  .card {
+    pointer-events: auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-radius: 14px;
+    padding: 12px 16px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+  }
+  .title-card h1 {
+    font-size: 18px; font-weight: 600; letter-spacing: 0.01em;
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .title-card h1 em { font-style: italic; font-weight: 500; color: var(--accent-hi); }
+  .title-card p {
+    font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.4;
+  }
+
+  .top-actions {
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
+  }
+  .controls-bar {
+    pointer-events: auto;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+    max-width: 1080px; margin: 0 auto; width: 100%;
+  }
+
+  button, select, a.btn {
+    appearance: none;
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 7px 12px;
+    font-size: 13px; font-weight: 500;
+    cursor: pointer; text-decoration: none;
+    transition: background 140ms, border-color 140ms, transform 90ms;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  button:hover, select:hover, a.btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.24);
+  }
+  button:active { transform: scale(0.97); }
+  button.primary {
+    background: linear-gradient(180deg, #e0a357, #be7b31);
+    border-color: rgba(255, 224, 175, 0.4);
+    color: #160e05; font-weight: 700;
+    padding: 8px 18px; font-size: 14px;
+    box-shadow: 0 4px 16px rgba(217, 155, 82, 0.32);
+  }
+  button.primary:hover { background: linear-gradient(180deg, #ebb269, #cb8639); }
+  button.active {
+    background: rgba(217, 155, 82, 0.22);
+    border-color: var(--accent);
+    color: var(--accent-hi);
+  }
+  select option { background: #14171d; color: #eef0f3; }
+
+  .group {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .group label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .scrubber {
+    flex: 1 1 180px; display: flex; align-items: center; gap: 8px; min-width: 160px;
+  }
+  .scrubber input[type=range] {
+    flex: 1; accent-color: var(--accent); cursor: pointer;
+  }
+  .scrubber span { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+
+  .hint-pill {
+    font-size: 11px; color: var(--muted);
+    display: flex; gap: 10px; flex-wrap: wrap;
+    margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.07);
+    width: 100%; justify-content: space-between;
+  }
+  .hint-pill kbd {
+    background: rgba(255,255,255,0.1); border-radius: 4px;
+    padding: 1px 5px; font-family: inherit; font-size: 10px; color: var(--text);
+  }
+
+  #statusBanner {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(14, 16, 20, 0.9); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 22px; font-size: 14px; color: var(--text);
+    text-align: center; max-width: 420px; z-index: 20;
+  }
+  #statusBanner[hidden] { display: none; }
+</style>
+</head>
+<body>
+<canvas id="glcanvas"></canvas>
+
+<div id="statusBanner">Loading <em>morganucodon.glb</em>…</div>
+
+<div class="hud" id="hud">
+  <div class="top-row">
+    <div class="card title-card">
+      <h1><em>Morganucodon</em> <span>watsoni</span></h1>
+      <p>Late Triassic – Early Jurassic (~205 Ma) · Early Mammaliaform · Rigged PBR 3D Specimen</p>
+    </div>
+    <div class="card top-actions">
+      <button id="btnCamHero" class="active" data-cam="hero">3/4 Hero</button>
+      <button id="btnCamSide" data-cam="side">Side</button>
+      <button id="btnCamFront" data-cam="front">Front</button>
+      <button id="btnCamHead" data-cam="head">Head</button>
+      <button id="btnCamTop" data-cam="top">Top</button>
+      <a class="btn" href="morganucodon.glb" download="morganucodon.glb" title="Download rigged glTF 2.0 binary">Download .glb</a>
+    </div>
+  </div>
+
+  <div class="card controls-bar">
+    <button id="btnJump" class="primary" title="Trigger jump (Space)">Jump!</button>
+    <button id="btnPause" title="Pause / resume (P)">Pause</button>
+    <button id="btnTurn" title="Toggle 72°/s turntable (T)">Turntable</button>
+
+    <div class="group">
+      <label for="selAnim">Mode</label>
+      <select id="selAnim">
+        <option value="interactive" selected>Interactive (Idle + Jump)</option>
+        <option value="jump_loop">Loop Jump</option>
+        <option value="idle">Idle Only</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <label for="selStage">Stage</label>
+      <select id="selStage">
+        <option value="museum" selected>Museum Exhibit</option>
+        <option value="holo_rock">Hologram · Mossy Rock</option>
+        <option value="holo_black">Hologram · Pure Black</option>
+      </select>
+    </div>
+
+    <div class="scrubber">
+      <input id="rngTime" type="range" min="0" max="2.8" step="0.01" value="0">
+      <span id="lblTime">0.00s</span>
+    </div>
+
+    <div class="hint-pill">
+      <span>Drag to orbit · Scroll to zoom · Right-drag to pan · <kbd>Space</kbd> Jump · <kbd>T</kbd> Turntable · <kbd>P</kbd> Pause · <kbd>H</kbd> Hide UI</span>
+      <span id="meshInfo">Loading…</span>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ============================================================================
+ * Minimal Matrix / Quaternion Math (column-major Float32Array for WebGL2)
+ * ========================================================================== */
+const M4 = {
+  ident: () => new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]),
+  mul(out, a, b) {
+    const o = out || new Float32Array(16);
+    for (let c = 0; c < 4; c++) {
+      const b0 = b[c*4], b1 = b[c*4+1], b2 = b[c*4+2], b3 = b[c*4+3];
+      o[c*4+0] = a[0]*b0 + a[4]*b1 + a[8]*b2  + a[12]*b3;
+      o[c*4+1] = a[1]*b0 + a[5]*b1 + a[9]*b2  + a[13]*b3;
+      o[c*4+2] = a[2]*b0 + a[6]*b1 + a[10]*b2 + a[14]*b3;
+      o[c*4+3] = a[3]*b0 + a[7]*b1 + a[11]*b2 + a[15]*b3;
+    }
+    return o;
+  },
+  fromTRS(out, t, q, s) {
+    const x = q[0], y = q[1], z = q[2], w = q[3];
+    const x2 = x+x, y2 = y+y, z2 = z+z;
+    const xx = x*x2, xy = x*y2, xz = x*z2;
+    const yy = y*y2, yz = y*z2, zz = z*z2;
+    const wx = w*x2, wy = w*y2, wz = w*z2;
+    const sx = s[0], sy = s[1], sz = s[2];
+    out[0] = (1-(yy+zz))*sx; out[1] = (xy+wz)*sx;     out[2] = (xz-wy)*sx;     out[3] = 0;
+    out[4] = (xy-wz)*sy;     out[5] = (1-(xx+zz))*sy; out[6] = (yz+wx)*sy;     out[7] = 0;
+    out[8] = (xz+wy)*sz;     out[9] = (yz-wx)*sz;     out[10] = (1-(xx+yy))*sz; out[11] = 0;
+    out[12] = t[0];          out[13] = t[1];          out[14] = t[2];          out[15] = 1;
+    return out;
+  },
+  rotY(rad) {
+    const c = Math.cos(rad), s = Math.sin(rad);
+    return new Float32Array([c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]);
+  },
+  perspective(fovRad, aspect, near, far) {
+    const f = 1.0 / Math.tan(fovRad * 0.5);
+    const nf = 1.0 / (near - far);
+    return new Float32Array([
+      f / aspect, 0, 0, 0,
+      0, f, 0, 0,
+      0, 0, (far + near) * nf, -1,
+      0, 0, 2 * far * near * nf, 0,
+    ]);
+  },
+  lookAt(eye, target, up) {
+    let zx = eye[0]-target[0], zy = eye[1]-target[1], zz = eye[2]-target[2];
+    let zl = Math.hypot(zx, zy, zz) || 1; zx/=zl; zy/=zl; zz/=zl;
+    let xx = up[1]*zz - up[2]*zy, xy = up[2]*zx - up[0]*zz, xz = up[0]*zy - up[1]*zx;
+    let xl = Math.hypot(xx, xy, xz) || 1; xx/=xl; xy/=xl; xz/=xl;
+    let yx = zy*xz - zz*xy, yy = zz*xx - zx*xz, yz = zx*xy - zy*xx;
+    return new Float32Array([
+      xx, yx, zx, 0,
+      xy, yy, zy, 0,
+      xz, yz, zz, 0,
+      -(xx*eye[0]+xy*eye[1]+xz*eye[2]),
+      -(yx*eye[0]+yy*eye[1]+yz*eye[2]),
+      -(zx*eye[0]+zy*eye[1]+zz*eye[2]),
+      1,
+    ]);
+  }
+};
+
+function slerp(out, a, b, t) {
+  let ax=a[0], ay=a[1], az=a[2], aw=a[3];
+  let bx=b[0], by=b[1], bz=b[2], bw=b[3];
+  let dot = ax*bx + ay*by + az*bz + aw*bw;
+  if (dot < 0) { dot = -dot; bx=-bx; by=-by; bz=-bz; bw=-bw; }
+  if (dot > 0.9995) {
+    out[0] = ax + t*(bx-ax); out[1] = ay + t*(by-ay);
+    out[2] = az + t*(bz-az); out[3] = aw + t*(bw-aw);
+  } else {
+    const theta0 = Math.acos(Math.min(1, dot));
+    const sin0 = Math.sin(theta0);
+    const s0 = Math.sin((1-t)*theta0) / sin0;
+    const s1 = Math.sin(t*theta0) / sin0;
+    out[0] = s0*ax + s1*bx; out[1] = s0*ay + s1*by;
+    out[2] = s0*az + s1*bz; out[3] = s0*aw + s1*bw;
+  }
+  const len = Math.hypot(out[0], out[1], out[2], out[3]) || 1;
+  out[0]/=len; out[1]/=len; out[2]/=len; out[3]/=len;
+  return out;
+}
+
+/* ============================================================================
+ * Standards-Compliant glTF 2.0 (.glb) Parser
+ * ========================================================================== */
+const COMP_TYPED = {
+  5120: Int8Array, 5121: Uint8Array, 5122: Int16Array,
+  5123: Uint16Array, 5125: Uint32Array, 5126: Float32Array,
+};
+const TYPE_COMPS = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
+
+async function loadGLB(arrayBuffer) {
+  const dv = new DataView(arrayBuffer);
+  if (dv.getUint32(0, true) !== 0x46546C67) throw new Error('Invalid GLB magic');
+  const jsonLen = dv.getUint32(12, true);
+  const jsonStr = new TextDecoder().decode(new Uint8Array(arrayBuffer, 20, jsonLen));
+  const gltf = JSON.parse(jsonStr);
+  const binHeaderOffset = 20 + jsonLen;
+  const binLen = dv.getUint32(binHeaderOffset, true);
+  const binStart = binHeaderOffset + 8;
+
+  const getAccessor = (idx) => {
+    const acc = gltf.accessors[idx];
+    const bv = gltf.bufferViews[acc.bufferView];
+    const Ctor = COMP_TYPED[acc.componentType];
+    const numComp = TYPE_COMPS[acc.type];
+    const byteOffset = binStart + (bv.byteOffset || 0) + (acc.byteOffset || 0);
+    return new Ctor(arrayBuffer, byteOffset, acc.count * numComp);
+  };
+
+  // Decode embedded PNG textures
+  const images = [];
+  for (const imgDef of (gltf.images || [])) {
+    const bv = gltf.bufferViews[imgDef.bufferView];
+    const slice = new Uint8Array(arrayBuffer, binStart + (bv.byteOffset || 0), bv.byteLength);
+    const blob = new Blob([slice], { type: imgDef.mimeType || 'image/png' });
+    const bmp = await createImageBitmap(blob);
+    images.push(bmp);
+  }
+
+  const prim = gltf.meshes[0].primitives[0];
+  const mesh = {
+    positions: getAccessor(prim.attributes.POSITION),
+    normals:   getAccessor(prim.attributes.NORMAL),
+    uvs:       getAccessor(prim.attributes.TEXCOORD_0),
+    joints:    getAccessor(prim.attributes.JOINTS_0),
+    weights:   getAccessor(prim.attributes.WEIGHTS_0),
+    indices:   getAccessor(prim.indices),
+  };
+
+  const skinDef = gltf.skins[0];
+  const ibmFlat = getAccessor(skinDef.inverseBindMatrices);
+  const joints = skinDef.joints;
+  const ibms = joints.map((_, i) => new Float32Array(ibmFlat.buffer, ibmFlat.byteOffset + i * 64, 16));
+
+  const nodes = gltf.nodes.map((n, idx) => ({
+    idx,
+    name: n.name || `node_${idx}`,
+    children: n.children || [],
+    restT: new Float32Array(n.translation || [0,0,0]),
+    restR: new Float32Array(n.rotation || [0,0,0,1]),
+    restS: new Float32Array(n.scale || [1,1,1]),
+    t: new Float32Array(n.translation || [0,0,0]),
+    r: new Float32Array(n.rotation || [0,0,0,1]),
+    s: new Float32Array(n.scale || [1,1,1]),
+    localM: M4.ident(),
+    worldM: M4.ident(),
+    parent: -1,
+  }));
+  nodes.forEach((n, pi) => n.children.forEach(ci => { nodes[ci].parent = pi; }));
+
+  // Parse animations
+  const anims = {};
+  for (const a of (gltf.animations || [])) {
+    let duration = 0;
+    const channels = a.channels.map(ch => {
+      const samp = a.samplers[ch.sampler];
+      const input = getAccessor(samp.input);
+      const output = getAccessor(samp.output);
+      if (input.length && input[input.length - 1] > duration) duration = input[input.length - 1];
+      return { node: ch.target.node, path: ch.target.path, input, output };
+    });
+    anims[a.name] = { name: a.name, duration, channels };
+  }
+
+  return { gltf, mesh, images, nodes, joints, ibms, anims };
+}
+
+/* ============================================================================
+ * WebGL2 Naturalistic Fur + PBR + Mossy Rock Plinth + Dust Particle Renderer
+ * ========================================================================== */
+const canvas = document.getElementById('glcanvas');
+const gl = canvas.getContext('webgl2', { antialias: true, alpha: false, preserveDrawingBuffer: true });
+if (!gl) {
+  document.getElementById('statusBanner').textContent = 'WebGL2 is required to view this 3D specimen.';
+  throw new Error('No WebGL2');
+}
+
+function compileShader(type, src) {
+  const sh = gl.createShader(type);
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    throw new Error(gl.getShaderInfoLog(sh) + '\n' + src);
+  }
+  return sh;
+}
+function createProgram(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compileShader(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, compileShader(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+
+// ---- 1. Skinned PBR + Charlie Fur Sheen + Ear SSS Shader ----
+const CREATURE_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+layout(location=2) in vec2 aUv;
+layout(location=3) in uvec4 aJoints;
+layout(location=4) in vec4 aWeights;
+
+uniform mat4 uViewProj;
+uniform mat4 uModel;
+uniform mat4 uJoints[32];
+
+out vec3 vWorldPos;
+out vec3 vWorldNrm;
+out vec2 vUv;
+
+void main() {
+  mat4 skin =
+      aWeights.x * uJoints[aJoints.x] +
+      aWeights.y * uJoints[aJoints.y] +
+      aWeights.z * uJoints[aJoints.z] +
+      aWeights.w * uJoints[aJoints.w];
+  vec4 localPos = skin * vec4(aPos, 1.0);
+  mat3 skinNrm = mat3(skin);
+  vec4 wp = uModel * localPos;
+  vWorldPos = wp.xyz;
+  vWorldNrm = normalize(mat3(uModel) * (skinNrm * aNrm));
+  vUv = aUv;
+  gl_Position = uViewProj * wp;
+}`;
+
+const CREATURE_FS = `#version 300 es
+precision highp float;
+in vec3 vWorldPos;
+in vec3 vWorldNrm;
+in vec2 vUv;
+
+uniform sampler2D uAlbedo;
+uniform sampler2D uNormal;
+uniform sampler2D uMR;
+uniform vec3 uCamPos;
+uniform vec3 uRootPos;
+uniform float uExposure;
+
+out vec4 fragColor;
+
+const float PI = 3.14159265359;
+
+// Cotangent frame for screen-space tangent-space normal mapping (zero tangent attr needed!)
+mat3 cotangentFrame(vec3 N, vec3 p, vec2 uv) {
+  vec3 dp1 = dFdx(p);
+  vec3 dp2 = dFdy(p);
+  vec2 duv1 = dFdx(uv);
+  vec2 duv2 = dFdy(uv);
+  vec3 dp2perp = cross(dp2, N);
+  vec3 dp1perp = cross(N, dp1);
+  vec3 T = dp2perp * duv1.x + dp1perp * duv2.x;
+  vec3 B = dp2perp * duv1.y + dp1perp * duv2.y;
+  float invmax = inversesqrt(max(dot(T, T), dot(B, B)) + 1e-8);
+  return mat3(T * invmax, B * invmax, N);
+}
+
+float D_GGX(float NoH, float a) {
+  float a2 = a * a;
+  float d = (NoH * a2 - NoH) * NoH + 1.0;
+  return a2 / (PI * d * d + 1e-6);
+}
+float G_Smith(float NoV, float NoL, float r) {
+  float k = (r + 1.0); k = (k * k) * 0.125;
+  float gv = NoV / (NoV * (1.0 - k) + k);
+  float gl = NoL / (NoL * (1.0 - k) + k);
+  return gv * gl;
+}
+vec3 F_Schlick(float VoH, vec3 F0) {
+  return F0 + (1.0 - F0) * pow(clamp(1.0 - VoH, 0.0, 1.0), 5.0);
+}
+
+// Charlie velvet/fur grazing sheen NDF (gives naturalistic mammal pelage rim softness!)
+float D_Charlie(float rough, float NoH) {
+  float invR = 1.0 / max(rough, 0.12);
+  float cos2h = NoH * NoH;
+  float sin2h = max(1.0 - cos2h, 0.0078125);
+  return (2.0 + invR) * pow(sin2h, invR * 0.5) / (2.0 * PI);
+}
+
+vec3 evalLight(vec3 N, vec3 V, vec3 L, vec3 lightCol, vec3 albedo, float rough, float furMask, float sssMask) {
+  vec3 H = normalize(V + L);
+  float NoV = max(dot(N, V), 0.001);
+  float NoL = max(dot(N, L), 0.0);
+  float NoH = max(dot(N, H), 0.0);
+  float VoH = max(dot(V, H), 0.0);
+
+  // Soft wrapped diffuse for natural fur light penetration
+  float wrap = 0.24 * furMask;
+  float diffTerm = max(0.0, (dot(N, L) + wrap) / ((1.0 + wrap) * (1.0 + wrap)));
+
+  vec3 F0 = vec3(0.04);
+  float a = max(rough * rough, 0.0016);
+  float D = D_GGX(NoH, a);
+  float G = G_Smith(NoV, max(NoL, 0.001), rough);
+  vec3 F = F_Schlick(VoH, F0);
+  vec3 spec = (D * G * F) / (4.0 * NoV * max(NoL, 0.001) + 0.001);
+
+  // Fur sheen grazing glow (soft warm velvet rim, subtle so rich browns stay deep!)
+  vec3 sheenCol = mix(albedo * 1.45 + vec3(0.05, 0.032, 0.018), vec3(0.75, 0.60, 0.44), 0.25);
+  float sheenD = D_Charlie(0.56, NoH);
+  float fresRim = pow(1.0 - NoV, 3.0);
+  vec3 sheen = sheenCol * (sheenD * 0.11 + fresRim * 0.18) * furMask * (0.25 + 0.75 * diffTerm);
+
+  // Warm reddish-amber subsurface scatter on thin inner ears & toes
+  float backLight = pow(clamp(dot(V, -L) * 0.5 + 0.5, 0.0, 1.0), 2.5);
+  vec3 sss = vec3(0.82, 0.26, 0.16) * sssMask * (0.20 * diffTerm + 0.34 * backLight);
+
+  vec3 kD = (1.0 - F);
+  return lightCol * ((kD * albedo / PI) * diffTerm + spec * NoL + sheen + sss);
+}
+
+vec3 acesToneMap(vec3 x) {
+  const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
+  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+void main() {
+  vec3 albedoSrgb = texture(uAlbedo, vUv).rgb;
+  vec3 albedo = pow(albedoSrgb, vec3(2.2));
+  float rough = clamp(texture(uMR, vUv).g, 0.032, 0.96);
+
+  vec3 Ngeom = normalize(vWorldNrm);
+  vec3 nMap = texture(uNormal, vUv).xyz * 2.0 - 1.0;
+  nMap.xy *= 1.18;
+  mat3 TBN = cotangentFrame(Ngeom, vWorldPos, vUv);
+  vec3 N = normalize(TBN * nMap);
+
+  vec3 V = normalize(uCamPos - vWorldPos);
+
+  // Detect furred regions vs glossy eyes/nose/claws & warm thin ears/toes
+  float furMask = smoothstep(0.58, 0.78, rough);
+  float isWarmPink = smoothstep(0.06, 0.16, albedoSrgb.r - albedoSrgb.g) * smoothstep(0.32, 0.62, albedoSrgb.r) * (1.0 - furMask);
+  float sssMask = isWarmPink * 0.85;
+
+  // 3-Point Museum Studio Rig (rich contrast so dorsal band, russet flanks & cream belly shine!)
+  vec3 L_key  = normalize(vec3(0.58, 0.78, 0.54));
+  vec3 C_key  = vec3(2.85, 2.55, 2.18);
+
+  vec3 L_fill = normalize(vec3(-0.78, 0.35, 0.32));
+  vec3 C_fill = vec3(0.62, 0.74, 0.96);
+
+  vec3 L_rim  = normalize(vec3(-0.30, 0.58, -0.82));
+  vec3 C_rim  = vec3(2.05, 1.56, 1.02);
+
+  // Soft camera-relative catchlight so glossy nocturnal eyes always have a crisp living sparkle!
+  vec3 camRight = normalize(cross(vec3(0.0, 1.0, 0.0), V));
+  vec3 camUp = cross(V, camRight);
+  vec3 L_eye = normalize(V * 0.68 + camRight * 0.44 + camUp * 0.56);
+  float isGlossyEye = smoothstep(0.09, 0.04, rough);
+  vec3 C_eye = vec3(0.55, 0.52, 0.48) * (1.0 + 3.2 * isGlossyEye);
+
+  vec3 col = vec3(0.0);
+  col += evalLight(N, V, L_key,  C_key,  albedo, rough, furMask, sssMask);
+  col += evalLight(N, V, L_fill, C_fill, albedo, rough, furMask, sssMask);
+  col += evalLight(N, V, L_rim,  C_rim,  albedo, rough, furMask, sssMask);
+  col += evalLight(N, V, L_eye,  C_eye,  albedo, rough, furMask * 0.22, 0.0);
+
+  // Hemisphere ambient bounce + subtle ground AO near Y=0
+  float hemi = N.y * 0.5 + 0.5;
+  vec3 amb = mix(vec3(0.035, 0.030, 0.028), vec3(0.14, 0.15, 0.17), hemi) * albedo;
+  float groundBounceAO = mix(0.62, 1.0, smoothstep(0.0, 0.22, vWorldPos.y));
+  // Subtle silhouette rim lift on fur edges for hologram glass clarity
+  float holoRim = pow(1.0 - max(dot(Ngeom, V), 0.0), 3.6) * furMask;
+  col += amb * groundBounceAO + (albedo * 0.65 + vec3(0.09, 0.06, 0.035)) * holoRim * 0.42;
+
+  col = acesToneMap(col * uExposure);
+  col = pow(col, vec3(1.0 / 2.2));
+  fragColor = vec4(col, 1.0);
+}`;
+
+// ---- 2. Mossy Late-Triassic Basalt Rock / Museum Pedestal Shader ----
+const ROCK_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+layout(location=2) in vec3 aCol;
+
+uniform mat4 uViewProj;
+uniform mat4 uModel;
+
+out vec3 vWorldPos;
+out vec3 vLocalPos;
+out vec3 vWorldNrm;
+out vec3 vCol;
+
+void main() {
+  vLocalPos = aPos;
+  vec4 wp = uModel * vec4(aPos, 1.0);
+  vWorldPos = wp.xyz;
+  vWorldNrm = normalize(mat3(uModel) * aNrm);
+  vCol = aCol;
+  gl_Position = uViewProj * wp;
+}`;
+
+const ROCK_FS = `#version 300 es
+precision highp float;
+in vec3 vWorldPos;
+in vec3 vLocalPos;
+in vec3 vWorldNrm;
+in vec3 vCol;
+
+uniform vec3 uCamPos;
+uniform vec3 uShadowPos;  // Morganucodon root (x, y_height, z) in local rock space
+uniform float uHoloFade;  // 1.0 in hologram rock mode (fades bottom rim smoothly to pure black)
+
+out vec4 fragColor;
+
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
+}
+
+void main() {
+  vec3 N = normalize(vWorldNrm);
+  vec3 V = normalize(uCamPos - vWorldPos);
+
+  // Fine basalt mineral & moss grain
+  float g1 = noise(vLocalPos.xz * 18.0);
+  float g2 = noise(vLocalPos.xz * 48.0);
+  vec3 baseCol = pow(vCol * (0.82 + 0.34 * g1) * (0.90 + 0.18 * g2), vec3(2.2));
+
+  // Perturb normal slightly for rocky micro-roughness
+  N = normalize(N + vec3((g2 - 0.5) * 0.25, 0.0, (g1 - 0.5) * 0.25));
+
+  vec3 L_key = normalize(vec3(0.62, 0.78, 0.55));
+  vec3 L_rim = normalize(vec3(-0.32, 0.56, -0.82));
+  float diff1 = max(dot(N, L_key), 0.0);
+  float diff2 = max(dot(N, L_rim), 0.0);
+  vec3 H = normalize(L_key + V);
+  float spec = pow(max(dot(N, H), 0.0), 18.0) * 0.08;
+
+  vec3 col = baseCol * (vec3(0.11, 0.11, 0.12) + vec3(1.85, 1.68, 1.48) * diff1 + vec3(0.85, 0.70, 0.48) * diff2) + vec3(spec);
+
+  // Dynamic soft contact shadow directly beneath the Morganucodon!
+  // Shrinks & darkens when crouched on rock, expands & fades smoothly as it leaps high!
+  float h = max(0.0, uShadowPos.y - 0.25);
+  vec2 d = vLocalPos.xz - vec2(uShadowPos.x, uShadowPos.z + 0.14);
+  // Elongated along Z (body length)
+  float rx = 0.22 + h * 0.55;
+  float rz = 0.46 + h * 0.65;
+  float dist2 = (d.x * d.x) / (rx * rx) + (d.y * d.y) / (rz * rz);
+  float shadowStrength = mix(0.76, 0.12, clamp(h / 0.75, 0.0, 1.0));
+  float shadow = 1.0 - shadowStrength * exp(-dist2 * 1.45) * smoothstep(-0.08, -0.005, vLocalPos.y);
+  col *= shadow;
+
+  // In hologram mode, smoothly darken underside to pure black so rock floats like a volcano plinth!
+  if (uHoloFade > 0.5) {
+    float botFade = smoothstep(-0.24, -0.05, vLocalPos.y);
+    col *= botFade;
+  }
+
+  col = col / (col + vec3(1.0)); // soft filmic rolloff
+  col = pow(clamp(col, 0.0, 1.0), vec3(1.0 / 2.2));
+  fragColor = vec4(col, 1.0);
+}`;
+
+// ---- 3. Subtle Museum Studio Backdrop & Dust Mote Particle Shaders ----
+const BG_VS = `#version 300 es
+precision highp float;
+out vec2 vUv;
+void main() {
+  vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+  vUv = p;
+  gl_Position = vec4(p * 2.0 - 1.0, 0.9999, 1.0);
+}`;
+const BG_FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform float uIsMuseum;
+out vec4 fragColor;
+void main() {
+  if (uIsMuseum < 0.5) {
+    fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
+  vec2 p = vUv - vec2(0.5, 0.48);
+  float d = length(p * vec2(1.1, 1.25));
+  vec3 center = vec3(0.085, 0.082, 0.078);
+  vec3 edge   = vec3(0.018, 0.020, 0.024);
+  vec3 c = mix(center, edge, smoothstep(0.05, 0.85, d));
+  fragColor = vec4(c, 1.0);
+}`;
+
+const PART_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec4 aPosSize; // xyz world pos, w point size
+layout(location=1) in float aAlpha;
+uniform mat4 uViewProj;
+uniform mat4 uModel;
+uniform float uPixelRatio;
+out float vAlpha;
+void main() {
+  vec4 wp = uModel * vec4(aPosSize.xyz, 1.0);
+  vec4 clip = uViewProj * wp;
+  gl_Position = clip;
+  gl_PointSize = clamp((aPosSize.w * uPixelRatio * 480.0) / max(clip.w, 0.2), 1.5, 24.0);
+  vAlpha = aAlpha;
+}`;
+const PART_FS = `#version 300 es
+precision highp float;
+in float vAlpha;
+out vec4 fragColor;
+void main() {
+  vec2 c = gl_PointCoord - 0.5;
+  float r = length(c) * 2.0;
+  float a = smoothstep(1.0, 0.15, r) * vAlpha;
+  if (a < 0.005) discard;
+  fragColor = vec4(0.76, 0.66, 0.50, a);
+}`;
+
+const progCreature = createProgram(CREATURE_VS, CREATURE_FS);
+const progRock = createProgram(ROCK_VS, ROCK_FS);
+const progBg = createProgram(BG_VS, BG_FS);
+const progPart = createProgram(PART_VS, PART_FS);
+
+/* ============================================================================
+ * Build Solid Closed 3D Sculpted Mossy Late-Triassic Basalt Rock Mound
+ * ========================================================================== */
+function buildRockVAO() {
+  const nA = 56;
+  // Concentric latitude profile from top center (s=0) -> flat walkable mossy ledge -> rugged cliff -> tapered base (s=1)
+  const profile = [
+    // [radiusScale, yBase, cragAmp, isTop]
+    [0.00,  0.000, 0.000, 1.0],
+    [0.24, -0.001, 0.002, 1.0],
+    [0.48, -0.002, 0.004, 1.0],
+    [0.68, -0.008, 0.010, 0.95],
+    [0.84, -0.028, 0.022, 0.72],
+    [0.95, -0.068, 0.036, 0.30],
+    [1.00, -0.125, 0.044, 0.05],
+    [0.96, -0.188, 0.038, 0.00],
+    [0.82, -0.238, 0.024, 0.00],
+    [0.52, -0.268, 0.012, 0.00],
+    [0.00, -0.280, 0.000, 0.00],
+  ];
+  const nR = profile.length;
+  const pos = [], col = [], idx = [];
+
+  for (let ir = 0; ir < nR; ir++) {
+    const [rSc, yBase, cragAmp, topWeight] = profile[ir];
+    for (let ia = 0; ia <= nA; ia++) {
+      const ang = (ia / nA) * Math.PI * 2;
+      // Organic multifaceted volcanic stone outline
+      const rockyEdge =
+        1.0
+        + 0.13 * Math.sin(ang * 3.0 + 0.6)
+        + 0.08 * Math.cos(ang * 5.0 - 1.1)
+        + 0.045 * Math.sin(ang * 9.0 + 2.1)
+        + 0.025 * Math.cos(ang * 13.0);
+      const cliffFacet = cragAmp * (Math.sin(ang * 7.0 + ir * 0.9) * 0.7 + Math.cos(ang * 11.0 - ir * 1.4) * 0.5);
+      const rMod = rSc * rockyEdge + cliffFacet;
+      const x = Math.cos(ang) * rMod * 0.76;
+      const z = Math.sin(ang) * rMod * 1.02 - 0.24;
+      const microY = (Math.sin(x * 8.5 + 0.4) * Math.cos(z * 7.2 - 0.7) * 0.010 + Math.sin((x - z) * 15.0) * 0.005) * (1.0 - topWeight * 0.85);
+      const y = yBase + microY - 0.003;
+      pos.push(x, y, z);
+
+      // Naturalistic dark Triassic basalt with lush olive-green moss cushions on upper surface
+      const mossField = Math.sin(x * 5.2 + 0.8) * Math.cos(z * 4.5 - 0.5) + 0.48 * Math.sin((x - z) * 8.8 + 1.2);
+      const moss = Math.max(0, Math.min(1, (mossField - 0.05) * 1.35)) * topWeight;
+      const strata = 0.86 + 0.24 * Math.sin(y * 42.0 + x * 4.0);
+      const cr = (0.20 * (1 - moss) + 0.22 * moss) * strata;
+      const cg = (0.18 * (1 - moss) + 0.30 * moss) * strata;
+      const cb = (0.16 * (1 - moss) + 0.12 * moss) * strata;
+      col.push(cr, cg, cb);
+    }
+  }
+
+  const stride = nA + 1;
+  for (let ir = 0; ir < nR - 1; ir++) {
+    for (let ia = 0; ia < nA; ia++) {
+      const v00 = ir * stride + ia, v01 = v00 + 1, v10 = v00 + stride, v11 = v10 + 1;
+      // Outward CCW winding
+      idx.push(v00, v10, v11, v00, v11, v01);
+    }
+  }
+
+  // Compute crisp area-weighted outward vertex normals
+  const nVerts = pos.length / 3;
+  const nrm = new Float32Array(pos.length);
+  for (let k = 0; k < idx.length; k += 3) {
+    const i0 = idx[k]*3, i1 = idx[k+1]*3, i2 = idx[k+2]*3;
+    const ax = pos[i1]-pos[i0], ay = pos[i1+1]-pos[i0+1], az = pos[i1+2]-pos[i0+2];
+    const bx = pos[i2]-pos[i0], by = pos[i2+1]-pos[i0+1], bz = pos[i2+2]-pos[i0+2];
+    const nx = ay*bz - az*by, ny = az*bx - ax*bz, nz = ax*by - ay*bx;
+    nrm[i0]+=nx; nrm[i0+1]+=ny; nrm[i0+2]+=nz;
+    nrm[i1]+=nx; nrm[i1+1]+=ny; nrm[i1+2]+=nz;
+    nrm[i2]+=nx; nrm[i2+1]+=ny; nrm[i2+2]+=nz;
+  }
+  // Verify top vertex normal points +Y; flip if inverted
+  if (nrm[1] < 0) {
+    for (let k = 0; k < idx.length; k += 3) {
+      const tmp = idx[k+1]; idx[k+1] = idx[k+2]; idx[k+2] = tmp;
+    }
+    for (let i = 0; i < nrm.length; i++) nrm[i] = -nrm[i];
+  }
+  for (let i = 0; i < nVerts; i++) {
+    const o = i*3, l = Math.hypot(nrm[o], nrm[o+1], nrm[o+2]) || 1;
+    nrm[o]/=l; nrm[o+1]/=l; nrm[o+2]/=l;
+  }
+
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const bindBuf = (loc, data, size) => {
+    const b = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, data instanceof Float32Array ? data : new Float32Array(data), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+  };
+  bindBuf(0, pos, 3);
+  bindBuf(1, nrm, 3);
+  bindBuf(2, col, 3);
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(idx), gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  return { vao, count: idx.length };
+}
+const rockMesh = buildRockVAO();
+
+// Dust mote particle buffer (deterministic seeded motes for takeoff & landing!)
+const MAX_PART = 36;
+const partSeeds = Array.from({ length: MAX_PART }, (_, i) => {
+  const s = (n) => { const x = Math.sin(i * 127.1 + n * 311.7) * 43758.5453; return x - Math.floor(x); };
+  const isLanding = i >= MAX_PART / 2;
+  const ang = s(1) * Math.PI * 2;
+  const rad = 0.08 + s(2) * 0.22;
+  return {
+    isLanding,
+    t0: isLanding ? 1.60 + s(3) * 0.08 : 0.72 + s(3) * 0.09,
+    life: 0.45 + s(4) * 0.40,
+    x0: Math.cos(ang) * rad * 0.75,
+    z0: (isLanding ? 0.05 : -0.24) + Math.sin(ang) * rad * 0.85,
+    vx: Math.cos(ang) * (0.14 + s(5) * 0.22),
+    vy: 0.16 + s(6) * 0.26,
+    vz: Math.sin(ang) * (0.14 + s(5) * 0.22) + (isLanding ? 0.08 : -0.18),
+    size: 0.032 + s(7) * 0.038,
+  };
+});
+const partVao = gl.createVertexArray();
+gl.bindVertexArray(partVao);
+const partPosBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, partPosBuf);
+gl.bufferData(gl.ARRAY_BUFFER, MAX_PART * 4 * 4, gl.DYNAMIC_DRAW);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
+const partAlphaBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, partAlphaBuf);
+gl.bufferData(gl.ARRAY_BUFFER, MAX_PART * 4, gl.DYNAMIC_DRAW);
+gl.enableVertexAttribArray(1);
+gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 0, 0);
+gl.bindVertexArray(null);
+const partPosData = new Float32Array(MAX_PART * 4);
+const partAlphaData = new Float32Array(MAX_PART);
+
+/* ============================================================================
+ * Upload Parsed GLB Model to WebGL2
+ * ========================================================================== */
+let model = null;
+let creatureVAO = null;
+let texAlbedo = null, texNormal = null, texMR = null;
+const jointMatsFlat = new Float32Array(32 * 16);
+
+function uploadTexture(bmp, isSRGB) {
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, isSRGB ? gl.RGBA : gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bmp);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+
+function setupModelGPU(m) {
+  model = m;
+  creatureVAO = gl.createVertexArray();
+  gl.bindVertexArray(creatureVAO);
+
+  const mkFloatBuf = (loc, arr, size) => {
+    const b = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+  };
+  mkFloatBuf(0, m.mesh.positions, 3);
+  mkFloatBuf(1, m.mesh.normals, 3);
+  mkFloatBuf(2, m.mesh.uvs, 2);
+
+  const jb = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, jb);
+  gl.bufferData(gl.ARRAY_BUFFER, m.mesh.joints, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(3);
+  gl.vertexAttribIPointer(3, 4, gl.UNSIGNED_BYTE, 0, 0);
+
+  mkFloatBuf(4, m.mesh.weights, 4);
+
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, m.mesh.indices, gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+
+  texAlbedo = uploadTexture(m.images[0], false);
+  texNormal = uploadTexture(m.images[1], false);
+  texMR     = uploadTexture(m.images[2], false);
+
+  document.getElementById('meshInfo').textContent =
+    `${(m.mesh.positions.length / 3).toLocaleString()} verts · ${(m.mesh.indices.length / 3).toLocaleString()} tris · ${m.joints.length} bones`;
+}
+
+/* ============================================================================
+ * Skeletal Animation Sampling & Smooth Crossfading
+ * ========================================================================== */
+function sampleAnimInto(anim, timeSec, outT, outR) {
+  const t = Math.max(0, Math.min(anim.duration, timeSec));
+  for (const ch of anim.channels) {
+    const inp = ch.input;
+    const out = ch.output;
+    let hi = 1;
+    while (hi < inp.length - 1 && inp[hi] < t) hi++;
+    const lo = hi - 1;
+    const dt = inp[hi] - inp[lo];
+    const f = dt > 1e-6 ? Math.max(0, Math.min(1, (t - inp[lo]) / dt)) : 0;
+    if (ch.path === 'translation') {
+      const a = lo * 3, b = hi * 3;
+      const dst = outT[ch.node];
+      dst[0] = out[a]   + (out[b]   - out[a])   * f;
+      dst[1] = out[a+1] + (out[b+1] - out[a+1]) * f;
+      dst[2] = out[a+2] + (out[b+2] - out[a+2]) * f;
+    } else if (ch.path === 'rotation') {
+      const a = lo * 4, b = hi * 4;
+      slerp(
+        outR[ch.node],
+        [out[a], out[a+1], out[a+2], out[a+3]],
+        [out[b], out[b+1], out[b+2], out[b+3]],
+        f
+      );
+    }
+  }
+}
+
+let liveRootPos = [0, 0.255, -0.22];
+
+function evaluateSkeleton(animName, timeSec, blendFrom = null) {
+  if (!model) return;
+  const nodes = model.nodes;
+  // Reset to rest
+  for (const n of nodes) {
+    n.t.set(n.restT);
+    n.r.set(n.restR);
+  }
+  const anim = model.anims[animName] || Object.values(model.anims)[0];
+  const tBufA = nodes.map(n => new Float32Array(n.restT));
+  const rBufA = nodes.map(n => new Float32Array(n.restR));
+  sampleAnimInto(anim, timeSec, tBufA, rBufA);
+
+  if (blendFrom && blendFrom.weight > 0.001) {
+    const tBufB = nodes.map(n => new Float32Array(n.restT));
+    const rBufB = nodes.map(n => new Float32Array(n.restR));
+    sampleAnimInto(model.anims[blendFrom.name], blendFrom.time, tBufB, rBufB);
+    const w = blendFrom.weight;
+    for (let i = 0; i < nodes.length; i++) {
+      for (let k = 0; k < 3; k++) nodes[i].t[k] = tBufA[i][k] * (1 - w) + tBufB[i][k] * w;
+      slerp(nodes[i].r, rBufA[i], rBufB[i], w);
+    }
+  } else {
+    for (let i = 0; i < nodes.length; i++) {
+      nodes[i].t.set(tBufA[i]);
+      nodes[i].r.set(rBufA[i]);
+    }
+  }
+
+  // Forward kinematics (nodes are ordered parent-before-child)
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    M4.fromTRS(n.localM, n.t, n.r, n.s);
+    if (n.parent >= 0) M4.mul(n.worldM, nodes[n.parent].worldM, n.localM);
+    else n.worldM.set(n.localM);
+  }
+
+  const rootJoint = nodes[model.joints[0]];
+  liveRootPos = [rootJoint.worldM[12], rootJoint.worldM[13], rootJoint.worldM[14]];
+
+  // Compute skinning matrices: worldM[joint] * inverseBindMatrix[joint]
+  const tmp = new Float32Array(16);
+  for (let j = 0; j < model.joints.length; j++) {
+    M4.mul(tmp, nodes[model.joints[j]].worldM, model.ibms[j]);
+    jointMatsFlat.set(tmp, j * 16);
+  }
+}
+
+/* ============================================================================
+ * Interactive Orbit Camera & Presets
+ * ========================================================================== */
+const CAM_PRESETS = {
+  hero:  { yaw: 0.78,  pitch: 0.22, dist: 2.95, target: [0.0, 0.42, -0.34] },
+  side:  { yaw: 1.57,  pitch: 0.08, dist: 3.10, target: [0.0, 0.42, -0.40] },
+  front: { yaw: 0.08,  pitch: 0.16, dist: 2.25, target: [0.0, 0.36, -0.05] },
+  head:  { yaw: 0.56,  pitch: 0.14, dist: 0.88, target: [0.0, 0.35,  0.34] },
+  top:   { yaw: 0.50,  pitch: 1.18, dist: 2.85, target: [0.0, 0.25, -0.36] },
+  // Specially framed square 720x720 hologram pyramid camera: keeps nose, tail & full jump apex comfortably inside at all 360 deg!
+  holo:  { yaw: 0.84,  pitch: 0.21, dist: 3.55, target: [0.0, 0.44, -0.36] },
+};
+
+const cam = { ...CAM_PRESETS.hero, target: [...CAM_PRESETS.hero.target] };
+function applyCameraPreset(name) {
+  const p = CAM_PRESETS[name] || CAM_PRESETS.hero;
+  cam.yaw = p.yaw; cam.pitch = p.pitch; cam.dist = p.dist;
+  cam.target = [...p.target];
+  document.querySelectorAll('[data-cam]').forEach(b => b.classList.toggle('active', b.dataset.cam === name));
+}
+
+let dragMode = null, lastX = 0, lastY = 0;
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  dragMode = e.button === 2 || e.shiftKey ? 'pan' : 'orbit';
+  lastX = e.clientX; lastY = e.clientY;
+});
+canvas.addEventListener('pointermove', e => {
+  if (!dragMode) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  if (dragMode === 'orbit') {
+    cam.yaw -= dx * 0.0075;
+    cam.pitch = Math.max(-0.45, Math.min(1.42, cam.pitch + dy * 0.0065));
+  } else {
+    const scale = cam.dist * 0.0014;
+    const rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
+    cam.target[0] -= rx * dx * scale;
+    cam.target[2] -= rz * dx * scale;
+    cam.target[1] += dy * scale;
+  }
+});
+canvas.addEventListener('pointerup', () => { dragMode = null; });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  cam.dist = Math.max(0.55, Math.min(6.0, cam.dist * (1 + e.deltaY * 0.001)));
+}, { passive: false });
+
+/* ============================================================================
+ * App State & Render Loop
+ * ========================================================================== */
+const app = {
+  mode: 'interactive',  // interactive | jump_loop | idle
+  activeClip: 'Idle',
+  time: 0,
+  blend: null,          // { name, time, weight }
+  paused: false,
+  turntable: false,
+  turnDeg: 0,
+  stage: 'museum',      // museum | holo_rock | holo_black
+  headlessOverride: false,
+};
+
+function triggerJump() {
+  if (!model) return;
+  app.paused = false;
+  document.getElementById('btnPause').textContent = 'Pause';
+  if (app.activeClip === 'Idle') {
+    app.blend = { name: 'Idle', time: app.time, weight: 1.0 };
+  }
+  app.activeClip = 'Jump';
+  app.time = 0;
+  updateScrubberMax();
+}
+
+function updateScrubberMax() {
+  if (!model) return;
+  const rng = document.getElementById('rngTime');
+  const dur = model.anims[app.activeClip]?.duration || 2.8;
+  rng.max = dur.toFixed(2);
+}
+
+function renderScene(width, height, dustTimeSec = -1) {
+  gl.viewport(0, 0, width, height);
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  // 1. Background pass
+  gl.disable(gl.DEPTH_TEST);
+  gl.useProgram(progBg);
+  gl.uniform1f(gl.getUniformLocation(progBg, 'uIsMuseum'), app.stage === 'museum' ? 1.0 : 0.0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.CULL_FACE);
+
+  // Camera matrices
+  const aspect = width / Math.max(1, height);
+  const proj = M4.perspective(36 * Math.PI / 180, aspect, 0.05, 30.0);
+  const eye = [
+    cam.target[0] + cam.dist * Math.cos(cam.pitch) * Math.sin(cam.yaw),
+    cam.target[1] + cam.dist * Math.sin(cam.pitch),
+    cam.target[2] + cam.dist * Math.cos(cam.pitch) * Math.cos(cam.yaw),
+  ];
+  const view = M4.lookAt(eye, cam.target, [0, 1, 0]);
+  const viewProj = M4.mul(null, proj, view);
+
+  // Turntable centers cleanly around the creature's visual midpoint (z ≈ -0.34)
+  const rad = app.turnDeg * Math.PI / 180;
+  const tToOrigin = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0.34,1]);
+  const tBack     = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,-0.34,1]);
+  const modelM = M4.mul(null, tBack, M4.mul(null, M4.rotY(rad), tToOrigin));
+
+  // 2. Mossy Rock Plinth (in Museum or Hologram-Rock modes)
+  if (app.stage !== 'holo_black') {
+    gl.useProgram(progRock);
+    gl.bindVertexArray(rockMesh.vao);
+    gl.uniformMatrix4fv(gl.getUniformLocation(progRock, 'uViewProj'), false, viewProj);
+    gl.uniformMatrix4fv(gl.getUniformLocation(progRock, 'uModel'), false, modelM);
+    gl.uniform3fv(gl.getUniformLocation(progRock, 'uCamPos'), eye);
+    gl.uniform3fv(gl.getUniformLocation(progRock, 'uShadowPos'), liveRootPos);
+    gl.uniform1f(gl.getUniformLocation(progRock, 'uHoloFade'), app.stage === 'holo_rock' ? 1.0 : 0.0);
+    gl.drawElements(gl.TRIANGLES, rockMesh.count, gl.UNSIGNED_INT, 0);
+  }
+
+  // 3. Skinned Morganucodon Specimen
+  if (model && creatureVAO) {
+    gl.useProgram(progCreature);
+    gl.bindVertexArray(creatureVAO);
+    gl.uniformMatrix4fv(gl.getUniformLocation(progCreature, 'uViewProj'), false, viewProj);
+    gl.uniformMatrix4fv(gl.getUniformLocation(progCreature, 'uModel'), false, modelM);
+    gl.uniformMatrix4fv(gl.getUniformLocation(progCreature, 'uJoints'), false, jointMatsFlat);
+    gl.uniform3fv(gl.getUniformLocation(progCreature, 'uCamPos'), eye);
+    gl.uniform3fv(gl.getUniformLocation(progCreature, 'uRootPos'), liveRootPos);
+    gl.uniform1f(gl.getUniformLocation(progCreature, 'uExposure'), app.stage === 'museum' ? 1.02 : 1.12);
+
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texAlbedo);
+    gl.uniform1i(gl.getUniformLocation(progCreature, 'uAlbedo'), 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texNormal);
+    gl.uniform1i(gl.getUniformLocation(progCreature, 'uNormal'), 1);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, texMR);
+    gl.uniform1i(gl.getUniformLocation(progCreature, 'uMR'), 2);
+
+    gl.drawElements(gl.TRIANGLES, model.mesh.indices.length, gl.UNSIGNED_INT, 0);
+  }
+
+  // 4. Subtle Triassic Dust Motes at Jump Takeoff & Landing
+  const jt = dustTimeSec >= 0 ? dustTimeSec : (app.activeClip === 'Jump' ? app.time : -1);
+  if (jt >= 0.70 && jt <= 2.45 && app.stage !== 'holo_black') {
+    let activeCount = 0;
+    for (let i = 0; i < MAX_PART; i++) {
+      const p = partSeeds[i];
+      const age = jt - p.t0;
+      if (age > 0 && age < p.life) {
+        const u = age / p.life;
+        const x = p.x0 + p.vx * age * (1.0 - 0.35 * u);
+        const y = 0.015 + p.vy * age - 0.18 * age * age;
+        const z = p.z0 + p.vz * age * (1.0 - 0.35 * u);
+        if (y > 0.0) {
+          partPosData[activeCount * 4 + 0] = x;
+          partPosData[activeCount * 4 + 1] = y;
+          partPosData[activeCount * 4 + 2] = z;
+          partPosData[activeCount * 4 + 3] = p.size * (0.7 + 0.8 * u);
+          partAlphaData[activeCount] = Math.sin(u * Math.PI) * 0.34;
+          activeCount++;
+        }
+      }
+    }
+    if (activeCount > 0) {
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+      gl.useProgram(progPart);
+      gl.bindVertexArray(partVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, partPosBuf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, partPosData.subarray(0, activeCount * 4));
+      gl.bindBuffer(gl.ARRAY_BUFFER, partAlphaBuf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, partAlphaData.subarray(0, activeCount));
+      gl.uniformMatrix4fv(gl.getUniformLocation(progPart, 'uViewProj'), false, viewProj);
+      gl.uniformMatrix4fv(gl.getUniformLocation(progPart, 'uModel'), false, modelM);
+      gl.uniform1f(gl.getUniformLocation(progPart, 'uPixelRatio'), width / 720);
+      gl.drawArrays(gl.POINTS, 0, activeCount);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+    }
+  }
+}
+
+function resizeCanvas() {
+  if (app.headlessOverride) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.floor(window.innerWidth * dpr);
+  const h = Math.floor(window.innerHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w; canvas.height = h;
+  }
+}
+window.addEventListener('resize', resizeCanvas);
+
+let prevTs = performance.now();
+function loop(ts) {
+  requestAnimationFrame(loop);
+  if (app.headlessOverride || !model) return;
+  const dt = Math.min(0.05, (ts - prevTs) / 1000);
+  prevTs = ts;
+
+  resizeCanvas();
+  if (!app.paused) {
+    if (app.turntable) app.turnDeg = (app.turnDeg + dt * 72.0) % 360.0;
+    const dur = model.anims[app.activeClip].duration;
+    app.time += dt;
+    if (app.blend) {
+      app.blend.weight = Math.max(0, app.blend.weight - dt * 6.5);
+      if (app.blend.weight <= 0) app.blend = null;
+    }
+    if (app.time >= dur) {
+      if (app.mode === 'interactive' && app.activeClip === 'Jump') {
+        app.blend = { name: 'Jump', time: dur, weight: 1.0 };
+        app.activeClip = 'Idle';
+        app.time = 0;
+        updateScrubberMax();
+      } else {
+        app.time = app.time % dur;
+      }
+    }
+    document.getElementById('rngTime').value = app.time.toFixed(2);
+    document.getElementById('lblTime').textContent = `${app.time.toFixed(2)}s`;
+  }
+  evaluateSkeleton(app.activeClip, app.time, app.blend);
+  renderScene(canvas.width, canvas.height);
+}
+
+/* ============================================================================
+ * UI Bindings & Keyboard Shortcuts
+ * ========================================================================== */
+document.getElementById('btnJump').onclick = triggerJump;
+document.getElementById('btnPause').onclick = () => {
+  app.paused = !app.paused;
+  document.getElementById('btnPause').textContent = app.paused ? 'Resume' : 'Pause';
+};
+document.getElementById('btnTurn').onclick = (e) => {
+  app.turntable = !app.turntable;
+  e.currentTarget.classList.toggle('active', app.turntable);
+};
+document.getElementById('selAnim').onchange = (e) => {
+  app.mode = e.target.value;
+  app.activeClip = app.mode === 'jump_loop' ? 'Jump' : 'Idle';
+  app.time = 0; app.blend = null;
+  updateScrubberMax();
+};
+document.getElementById('selStage').onchange = (e) => {
+  app.stage = e.target.value;
+};
+document.getElementById('rngTime').oninput = (e) => {
+  app.paused = true;
+  document.getElementById('btnPause').textContent = 'Resume';
+  app.time = parseFloat(e.target.value) || 0;
+  document.getElementById('lblTime').textContent = `${app.time.toFixed(2)}s`;
+};
+document.querySelectorAll('[data-cam]').forEach(btn => {
+  btn.onclick = () => applyCameraPreset(btn.dataset.cam);
+});
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); triggerJump(); }
+  else if (e.code === 'KeyP') document.getElementById('btnPause').click();
+  else if (e.code === 'KeyT') document.getElementById('btnTurn').click();
+  else if (e.code === 'KeyH') document.body.classList.toggle('hud-hidden');
+});
+
+/* ============================================================================
+ * Deterministic Offline Render API (for Holo Stage MP4 & Inspection Sheets)
+ * ========================================================================== */
+let resolveReady;
+const readyPromise = new Promise(r => { resolveReady = r; });
+
+window.__RENDER_API__ = {
+  ready: readyPromise,
+  renderFrame(opts) {
+    app.headlessOverride = true;
+    const w = opts.width || 1440;
+    const h = opts.height || 1440;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w; canvas.height = h;
+      canvas.style.width = `${w}px`; canvas.style.height = `${h}px`;
+    }
+    if (opts.hideHud !== false) document.body.classList.add('hud-hidden');
+    if (opts.stage) app.stage = opts.stage;
+    if (opts.cam) {
+      if (typeof opts.cam === 'string') applyCameraPreset(opts.cam);
+      else Object.assign(cam, opts.cam);
+    }
+    app.turnDeg = opts.turntableDeg || 0;
+    const clip = opts.clip || 'Idle';
+    const time = opts.time || 0;
+    app.activeClip = clip;
+    app.time = time;
+    evaluateSkeleton(clip, time, opts.blend || null);
+    renderScene(w, h, opts.dustTime != null ? opts.dustTime : (clip === 'Jump' ? time : -1));
+    gl.finish();
+    return true;
+  },
+  getDataURL() {
+    return canvas.toDataURL('image/png');
+  },
+};
+
+/* ============================================================================
+ * Boot: Fetch & Parse morganucodon.glb
+ * ========================================================================== */
+(async () => {
+  const banner = document.getElementById('statusBanner');
+  try {
+    const resp = await fetch('morganucodon.glb');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const buf = await resp.arrayBuffer();
+    const parsed = await loadGLB(buf);
+    setupModelGPU(parsed);
+    banner.hidden = true;
+    updateScrubberMax();
+    evaluateSkeleton('Idle', 0);
+    resolveReady(true);
+    requestAnimationFrame(loop);
+  } catch (err) {
+    banner.innerHTML = `Could not auto-load <b>morganucodon.glb</b> (${err.message}).<br><small>Run <code>python3 -m http.server 8765</code> and open <code>/morganucodon/</code>, or drop <b>morganucodon.glb</b> here.</small>`;
+    document.body.addEventListener('dragover', e => e.preventDefault());
+    document.body.addEventListener('drop', async e => {
+      e.preventDefault();
+      const file = e.dataTransfer?.files?.[0];
+      if (!file) return;
+      const parsed = await loadGLB(await file.arrayBuffer());
+      setupModelGPU(parsed);
+      banner.hidden = true;
+      updateScrubberMax();
+      resolveReady(true);
+      requestAnimationFrame(loop);
+    });
+  }
+})();
+</script>
+</body>
+</html>
