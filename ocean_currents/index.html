@@ -1,0 +1,1998 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ocean Currents — Thermal Convection Minigame</title>
+<style>
+  :root {
+    --bg: #04070d;
+    --panel: rgba(11, 16, 26, 0.86);
+    --well: rgba(6, 10, 18, 0.82);
+    --line: rgba(255, 255, 255, 0.11);
+    --line-hi: rgba(255, 255, 255, 0.22);
+    --fg: #eef3fa;
+    --muted: #8fa0b8;
+    --warm: #ff6a2b;
+    --cold: #2fb8ff;
+    --o2: #3be8a4;
+    --gold: #ffd028;
+    --p0: #ff4b3e;
+    --p1: #2f9bff;
+    --p2: #3ddc6a;
+    --p3: #ffd028;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    user-select: none; -webkit-user-select: none;
+  }
+
+  /* ---------------- Standard Interactive Layout ---------------- */
+  .app {
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    width: 100%; height: 100%;
+    background: radial-gradient(ellipse at 50% 30%, #091426 0%, #04070d 72%, #000 100%);
+  }
+  body.pyramid-mode .app { display: none; }
+
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    padding: 10px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    z-index: 5;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.01em; }
+  .brand .sub { font-size: 11.5px; color: var(--muted); }
+
+  .mode-tabs { display: flex; gap: 5px; flex-wrap: wrap; }
+  .top-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  .lang-switch {
+    display: inline-flex; padding: 2px; gap: 2px; border-radius: 9px;
+    background: var(--well); border: 1px solid var(--line);
+  }
+  .lang-switch button {
+    border: 0; background: none; color: var(--muted); border-radius: 6px;
+    padding: 4px 8px; font-size: 11px; font-weight: 700; min-height: 26px;
+  }
+  .lang-switch button[aria-pressed="true"] { background: var(--warm); color: #1a0802; }
+
+  button, .pill-btn {
+    appearance: none;
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 6px 11px;
+    min-height: 32px;
+    font-size: 12.5px; font-weight: 600;
+    cursor: pointer;
+    transition: background 130ms, border-color 130ms, transform 80ms;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  button:hover { background: rgba(255, 255, 255, 0.13); border-color: var(--line-hi); }
+  button:active { transform: scale(0.97); }
+  button.active {
+    background: rgba(255, 106, 43, 0.22);
+    border-color: var(--warm);
+    color: #ffd3bd;
+  }
+  button.primary {
+    background: linear-gradient(180deg, #ff8547, #e0571d);
+    border-color: rgba(255, 210, 180, 0.45);
+    color: #1c0802; font-weight: 700;
+  }
+  button.cold-active {
+    background: rgba(47, 184, 255, 0.24);
+    border-color: var(--cold);
+    color: #c2ebff;
+  }
+  button.o2-active {
+    background: rgba(59, 232, 164, 0.22);
+    border-color: var(--o2);
+    color: #c7ffea;
+  }
+
+  /* Main tank viewport */
+  .stage-wrap {
+    position: relative;
+    min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 12px 16px;
+  }
+  .tank-frame {
+    position: relative;
+    width: 100%; height: 100%;
+    max-width: 1220px; max-height: 700px;
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid rgba(110, 175, 255, 0.2);
+    box-shadow: 0 22px 60px rgba(0, 0, 0, 0.72), inset 0 0 40px rgba(20, 70, 130, 0.16);
+    background: #02050a;
+  }
+  #tankCanvas {
+    display: block; width: 100%; height: 100%;
+    touch-action: none; cursor: crosshair;
+  }
+
+  /* Mission & Telemetry Strip cleanly above the tank (never blocks Ice Caps 2 & 4!) */
+  .tank-hud-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 8px 16px 0;
+    max-width: 1252px; width: 100%; margin: 0 auto;
+  }
+  .mission-card, .telemetry-card {
+    background: rgba(8, 14, 24, 0.86);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 12px;
+    padding: 7px 12px;
+  }
+  .mission-card { flex: 1 1 360px; min-width: 0; }
+  .mission-title {
+    font-size: 13px; font-weight: 700; color: #fff;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .mission-desc { font-size: 11.5px; color: #b6c5da; margin-top: 2px; line-height: 1.35; }
+  .mission-prog {
+    margin-top: 5px; display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700;
+  }
+  .prog-track {
+    flex: 1; height: 6px; border-radius: 99px;
+    background: rgba(255,255,255,0.12); overflow: hidden; min-width: 90px;
+  }
+  .prog-fill {
+    height: 100%; width: 0%; border-radius: inherit;
+    background: linear-gradient(90deg, #2fb8ff, #3be8a4);
+    transition: width 120ms linear;
+  }
+
+  .telemetry-card {
+    display: flex; gap: 12px; align-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .metric { display: flex; flex-direction: column; align-items: flex-end; }
+  .metric .k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .metric .v { font-size: 15px; font-weight: 800; line-height: 1.15; }
+  .metric .v.dt { color: #ffb75e; }
+  .metric .v.flow { color: #67d3ff; }
+  .metric .v.o2 { color: #52f0b2; }
+
+  /* Level Complete / Fail Banner */
+  .overlay-modal {
+    position: absolute; inset: 0; z-index: 8;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(2, 6, 12, 0.68);
+    backdrop-filter: blur(6px);
+  }
+  .overlay-modal[hidden] { display: none; }
+  .modal-box {
+    background: rgba(12, 19, 32, 0.96);
+    border: 1px solid rgba(110, 210, 255, 0.3);
+    border-radius: 16px;
+    padding: 20px 24px;
+    max-width: 430px; text-align: center;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8);
+  }
+  .modal-box h2 { font-size: 20px; margin-bottom: 8px; }
+  .modal-box p { font-size: 13.5px; color: #c4d3e6; line-height: 1.48; margin-bottom: 14px; }
+  .modal-box .science-fact {
+    font-size: 12px; color: #8fe8c7; background: rgba(59, 232, 164, 0.1);
+    border: 1px solid rgba(59, 232, 164, 0.25);
+    border-radius: 10px; padding: 9px 11px; margin-bottom: 16px; text-align: left;
+  }
+  .modal-actions { display: flex; gap: 10px; justify-content: center; }
+
+  /* Bottom Control Deck */
+  .deck {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap;
+    padding: 10px 16px;
+    background: var(--panel); border-top: 1px solid var(--line);
+    z-index: 5;
+  }
+  .stations-bar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .station-btn {
+    padding: 7px 12px; min-height: 38px;
+    border-width: 1.5px; position: relative;
+  }
+  .station-btn .dot {
+    width: 10px; height: 10px; border-radius: 50%; flex: none;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .station-btn kbd {
+    font-size: 10.5px; padding: 1px 5px; border-radius: 4px;
+    background: rgba(255,255,255,0.12); color: #fff; font-family: inherit;
+  }
+  .station-btn.on {
+    box-shadow: 0 0 18px var(--glow, rgba(255,255,255,0.25));
+    border-color: var(--sc, #fff);
+    background: color-mix(in srgb, var(--sc, #fff) 24%, rgba(12,18,28,0.9));
+  }
+
+  .sandbox-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .sandbox-tools[hidden], .stations-bar[hidden] { display: none; }
+
+  .deck-right { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+
+  /* ---------------- 4-Sided Pepper's Ghost Pyramid Mode ---------------- */
+  #pyramidRoot {
+    position: fixed; inset: 0; background: #000; display: none;
+  }
+  body.pyramid-mode #pyramidRoot { display: block; }
+  #pyrStage {
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: #000;
+  }
+  .pyr-tile {
+    position: absolute; overflow: hidden;
+    -webkit-mask-image: radial-gradient(ellipse 96% 96% at 50% 50%, #000 84%, transparent 100%);
+    mask-image: radial-gradient(ellipse 96% 96% at 50% 50%, #000 84%, transparent 100%);
+    touch-action: none;
+  }
+  .pyr-tile canvas { width: 100%; height: 100%; display: block; }
+  .pyr-controls {
+    position: fixed; top: 12px; left: 12px; z-index: 30;
+    display: flex; gap: 8px; align-items: center;
+    opacity: 0.28; transition: opacity 180ms;
+  }
+  .pyr-controls:hover { opacity: 1; }
+  .pyr-controls button { background: #141821; border-color: rgba(255,255,255,0.2); font-size: 12px; }
+
+  @media (max-width: 780px) {
+    .topbar { padding: 8px 10px; }
+    .stage-wrap { padding: 6px 8px; }
+    .deck { padding: 8px 10px; }
+    .telemetry-card { gap: 8px; }
+    .metric .v { font-size: 13px; }
+    .mission-desc { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ====================== STANDARD INTERACTIVE MODE ====================== -->
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div>
+        <h1 data-i18n="title">Ocean Currents</h1>
+        <div class="sub" data-i18n="subtitle">Temperature differences power Earth’s underwater conveyor belt</div>
+      </div>
+    </div>
+
+    <div class="mode-tabs" id="levelTabs">
+      <button data-level="0" class="active" data-i18n="lvl0Tab">1 · Start Current</button>
+      <button data-level="1" data-i18n="lvl1Tab">2 · Reverse Gyre</button>
+      <button data-level="2" data-i18n="lvl2Tab">3 · Permian Heatwave</button>
+      <button data-level="3" data-i18n="lvl3Tab">4 · Deep Rescue</button>
+      <button data-level="4" data-i18n="lvl4Tab">Sandbox Lab</button>
+    </div>
+
+    <div class="top-right">
+      <button id="btnPyramid" title="4-sided Pepper's ghost hologram pyramid mode (keys 1-4 / gamepads)" data-i18n="pyramidBtn">Pyramid 4-Side</button>
+      <button id="btnSound" title="Toggle gentle water & chime sounds">🔊</button>
+      <div class="lang-switch" id="langSwitch">
+        <button data-lang="de">DE</button>
+        <button data-lang="it">IT</button>
+        <button data-lang="en" aria-pressed="true">EN</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="tank-hud-top">
+    <div class="mission-card">
+      <div class="mission-title"><span id="mBadge">●</span><span id="mTitle"></span></div>
+      <div class="mission-desc" id="mDesc"></div>
+      <div class="mission-prog" id="mProgWrap">
+        <div class="prog-track"><div class="prog-fill" id="mProgFill"></div></div>
+        <span id="mProgText">0 / 12</span>
+      </div>
+    </div>
+
+    <div class="telemetry-card">
+      <div class="metric">
+        <span class="k" data-i18n="mTempDiff">ΔT Gradient</span>
+        <span class="v dt" id="valDT">0.0 °C</span>
+      </div>
+      <div class="metric">
+        <span class="k" data-i18n="mFlow">Current</span>
+        <span class="v flow" id="valFlow">0 cm/s</span>
+      </div>
+      <div class="metric">
+        <span class="k" data-i18n="mDeepO2">Deep O₂</span>
+        <span class="v o2" id="valO2">45%</span>
+      </div>
+    </div>
+  </section>
+
+  <main class="stage-wrap">
+    <div class="tank-frame" id="tankFrame">
+      <canvas id="tankCanvas"></canvas>
+
+      <div class="overlay-modal" id="modal" hidden>
+        <div class="modal-box">
+          <h2 id="modalTitle"></h2>
+          <p id="modalBody"></p>
+          <div class="science-fact" id="modalFact"></div>
+          <div class="modal-actions">
+            <button id="modalRetry" data-i18n="btnReplay">Replay</button>
+            <button id="modalNext" class="primary" data-i18n="btnNext">Next level →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="deck">
+    <!-- 4 Thermal Stations (matching Holo Stage colors & keys 1-4!) -->
+    <div class="stations-bar" id="stationsBar">
+      <button class="station-btn" data-st="0" style="--sc:var(--p0);--glow:rgba(255,75,62,0.45)">
+        <i class="dot" style="background:var(--p0);color:var(--p0)"></i>
+        <span data-i18n="st0">West Vent 🔥</span>
+        <kbd>1</kbd>
+      </button>
+      <button class="station-btn" data-st="1" style="--sc:var(--p1);--glow:rgba(47,155,255,0.45)">
+        <i class="dot" style="background:var(--p1);color:var(--p1)"></i>
+        <span data-i18n="st1">East Ice ❄️</span>
+        <kbd>2</kbd>
+      </button>
+      <button class="station-btn" data-st="2" style="--sc:var(--p2);--glow:rgba(61,220,106,0.45)">
+        <i class="dot" style="background:var(--p2);color:var(--p2)"></i>
+        <span data-i18n="st2">East Vent 🔥</span>
+        <kbd>3</kbd>
+      </button>
+      <button class="station-btn" data-st="3" style="--sc:var(--p3);--glow:rgba(255,208,40,0.45)">
+        <i class="dot" style="background:var(--p3);color:var(--p3)"></i>
+        <span data-i18n="st3">West Ice ❄️</span>
+        <kbd>4</kbd>
+      </button>
+    </div>
+
+    <!-- Sandbox Paint Tools -->
+    <div class="sandbox-tools" id="sandboxTools" hidden>
+      <button data-tool="heat" class="active" data-i18n="toolHeat">🔥 Paint Heat</button>
+      <button data-tool="cold" data-i18n="toolCold">❄️ Paint Cold</button>
+      <button data-tool="o2" data-i18n="toolO2">🫧 Drop O₂</button>
+      <button data-tool="rock" data-i18n="toolRock">🪨 Rock Wall</button>
+      <button data-tool="erase" data-i18n="toolErase">🧹 Erase</button>
+      <button id="btnPresetConv" data-i18n="presetConveyor">Preset: Conveyor</button>
+      <button id="btnPresetStall" data-i18n="presetStall">Preset: Heat Stall</button>
+    </div>
+
+    <div class="deck-right">
+      <button id="btnVectors" data-i18n="btnArrows">Arrows</button>
+      <button id="btnThermal" class="active" data-i18n="btnThermal">Thermal Glow</button>
+      <button id="btnReset" data-i18n="btnReset">Reset</button>
+    </div>
+  </footer>
+</div>
+
+<!-- ====================== 4-SIDED PYRAMID MODE ====================== -->
+<div id="pyramidRoot">
+  <div id="pyrStage"></div>
+  <div class="pyr-controls">
+    <button id="btnExitPyr" data-i18n="exitPyramid">← Exit Pyramid</button>
+    <button id="btnPyrNextLvl" data-i18n="nextChallenge">Next Level</button>
+    <button id="btnPyrFull" data-i18n="fullscreen">Fullscreen</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ============================================================================
+ * 1. Multilingual Strings (EN / DE / IT — Matching Holo Stage)
+ * ========================================================================== */
+const I18N = {
+  en: {
+    title: 'Ocean Currents',
+    subtitle: 'Temperature differences power Earth’s underwater conveyor belt',
+    lvl0Tab: '1 · Start Current',
+    lvl1Tab: '2 · Reverse Gyre',
+    lvl2Tab: '3 · Permian Heatwave',
+    lvl3Tab: '4 · Deep Rescue',
+    lvl4Tab: 'Sandbox Lab',
+    pyramidBtn: 'Pyramid 4-Side',
+    exitPyramid: '← Exit Pyramid',
+    nextChallenge: 'Next Level',
+    fullscreen: 'Fullscreen',
+    mTempDiff: 'ΔT Gradient',
+    mFlow: 'Current',
+    mDeepO2: 'Deep O₂',
+    st0: 'West Vent 🔥',
+    st1: 'East Ice ❄️',
+    st2: 'East Vent 🔥',
+    st3: 'West Ice ❄️',
+    toolHeat: '🔥 Paint Heat',
+    toolCold: '❄️ Paint Cold',
+    toolO2: '🫧 Drop O₂',
+    toolRock: '🪨 Rock Wall',
+    toolErase: '🧹 Erase',
+    presetConveyor: 'Preset: Conveyor',
+    presetStall: 'Preset: Heat Stall',
+    btnArrows: 'Flow Arrows',
+    btnThermal: 'Thermal Glow',
+    btnReset: 'Reset',
+    btnReplay: 'Replay',
+    btnNext: 'Next level →',
+    btnSandbox: 'Open Sandbox →',
+    // Levels
+    l0Title: 'Level 1 · Start the Thermal Current',
+    l0Desc: 'Toggle West Vent (1) + East Ice (2) — or drag heat & cold in the tank — so warm water rises, cold oxygenated water sinks, and 12 O₂ bubbles reach the deep reef!',
+    l0WinTitle: 'Current Flowing!',
+    l0WinBody: 'You sparked a full convection loop and revived the deep-sea reef!',
+    l0Fact: 'Science: Warm water is lighter and rises; cold surface water is denser and sinks, dragging dissolved oxygen down to the abyssal ocean floor.',
+
+    l1Title: 'Level 2 · Reverse the Gyre',
+    l1Desc: 'A rocky seamount splits the seafloor! Oxygenate BOTH sheltered reefs (6 O₂ each) by switching between clockwise (1+2) and counter-clockwise (3+4) currents.',
+    l1WinTitle: 'Master of Ocean Gyres!',
+    l1WinBody: 'Both sides of the seamount are thriving with fresh deep-sea oxygen.',
+    l1Fact: 'Science: Flipping where heat rises and cold sinks reverses the direction of the entire circulation loop.',
+
+    l2Title: 'Level 3 · Permian–Triassic Heatwave!',
+    l2Desc: 'Volcanic eruptions heat the ocean and shrink ΔT! Keep polar ice cooling (2 & 4) active and survive 30 s with at least 2 reefs alive — if ΔT drops, the current stalls!',
+    l2WinTitle: 'Conveyor Survived!',
+    l2WinBody: 'Your polar cooling kept a temperature gradient alive through the volcanic crisis!',
+    l2FailTitle: 'Ocean Stagnated (Anoxia)!',
+    l2FailBody: 'The temperature difference collapsed — warm water stopped overturning and deep reefs ran out of oxygen.',
+    l2Fact: 'Science (~252 Ma): During the Permian–Triassic mass extinction, extreme greenhouse warming heated the poles, weakening ΔT and stalling ocean currents — causing widespread deep-sea anoxia.',
+
+    l3Title: 'Level 4 · Deep-Sea Ammonite Rescue',
+    l3Desc: 'Steer the drifting ammonite with live thermal currents through all 4 glowing checkpoints to the sanctuary reef! Use vents & ice to bend the flow.',
+    l3WinTitle: 'Ammonite Rescued!',
+    l3WinBody: 'You surfed warm updrafts and cold downdrafts all the way to the sanctuary reef!',
+    l3Fact: 'Science: Real marine larvae, plankton, and nutrients travel thousands of kilometers riding temperature-driven ocean currents.',
+
+    l4Title: 'Sandbox · Thermal Fluid Lab',
+    l4Desc: 'Paint heat, cold, O₂ bubbles, or rock ridges directly in the tank — or press keys 1–4 to mix real Navier–Stokes convection currents!',
+
+    stagnantWarn: 'STAGNANT · LOW ΔT!',
+    heatwaveAlert: 'VOLCANIC HEAT SURGE!',
+    surfaceLbl: 'SURFACE · O₂ RICH',
+    abyssLbl: 'ABYSSAL SEAFLOOR',
+    clickHint: 'Click stations (1–4) or drag in water',
+  },
+  de: {
+    title: 'Meeresströmungen',
+    subtitle: 'Temperaturunterschiede treiben das Förderband der Ozeane an',
+    lvl0Tab: '1 · Strömung starten',
+    lvl1Tab: '2 · Wirbel umkehren',
+    lvl2Tab: '3 · Perm-Hitzewelle',
+    lvl3Tab: '4 · Tiefsee-Rettung',
+    lvl4Tab: 'Freies Labor',
+    pyramidBtn: '4-Seiten Pyramide',
+    exitPyramid: '← Pyramide beenden',
+    nextChallenge: 'Nächstes Level',
+    fullscreen: 'Vollbild',
+    mTempDiff: 'ΔT-Unterschied',
+    mFlow: 'Strömung',
+    mDeepO2: 'Tiefsee-O₂',
+    st0: 'West-Schlot 🔥',
+    st1: 'Ost-Eis ❄️',
+    st2: 'Ost-Schlot 🔥',
+    st3: 'West-Eis ❄️',
+    toolHeat: '🔥 Wärme malen',
+    toolCold: '❄️ Kälte malen',
+    toolO2: '🫧 O₂ tropfen',
+    toolRock: '🪨 Felswand',
+    toolErase: '🧹 Löschen',
+    presetConveyor: 'Vorlage: Förderband',
+    presetStall: 'Vorlage: Stillstand',
+    btnArrows: 'Strömungspfeile',
+    btnThermal: 'Wärmebild',
+    btnReset: 'Zurücksetzen',
+    btnReplay: 'Nochmal',
+    btnNext: 'Nächstes Level →',
+    btnSandbox: 'Zum Labor →',
+
+    l0Title: 'Level 1 · Konvektion starten',
+    l0Desc: 'Aktiviere West-Schlot (1) + Ost-Eis (2) oder male Wärme & Kälte ins Becken: Warmes Wasser steigt auf, kaltes sauerstoffreiches sinkt ab und bringt 12 O₂-Blasen zum Tiefseeriff!',
+    l0WinTitle: 'Strömung läuft!',
+    l0WinBody: 'Du hast eine stabile Konvektionsströmung erzeugt und das Tiefseeriff belebt!',
+    l0Fact: 'Wissenschaft: Warmes Wasser ist leichter und steigt auf; kaltes Oberflächenwasser ist dichter, sinkt ab und zieht gelösten Sauerstoff bis zum Meeresboden.',
+
+    l1Title: 'Level 2 · Strömung umkehren',
+    l1Desc: 'Ein Unterwasserberg teilt den Meeresboden! Versorge BEIDE Riffe (je 6 O₂), indem du zwischen Rechtslauf (1+2) und Linkslauf (3+4) wechselst.',
+    l1WinTitle: 'Meister der Meereswirbel!',
+    l1WinBody: 'Beide Seiten des Unterwasserbergs blühen dank frischem Tiefsee-Sauerstoff auf.',
+    l1Fact: 'Wissenschaft: Wo Wärme aufsteigt und Kälte absinkt, bestimmt die Drehrichtung der gesamten Meereszirkulation.',
+
+    l2Title: 'Level 3 · Perm-Trias-Hitzewelle!',
+    l2Desc: 'Vulkanausbrüche heizen den Ozean auf und verkleinern ΔT! Halte die Polarkühlung (2 & 4) aktiv und überstehe 30 s mit mindestens 2 lebendigen Riffen!',
+    l2WinTitle: 'Förderband gerettet!',
+    l2WinBody: 'Deine Polarkühlung hat das Temperaturgefälle durch die Vulkankrise gerettet!',
+    l2FailTitle: 'Stillstand (Sauerstoffmangel)!',
+    l2FailBody: 'Der Temperaturunterschied brach zusammen – die Strömung stoppte und den Tiefseeriffen ging der Sauerstoff aus.',
+    l2Fact: 'Wissenschaft (~252 Mio. J.): Beim Perm-Trias-Massenaussterben erwärmte der Treibhauseffekt auch die Pole – ΔT schrumpfte, die Meeresströmungen stockten und die Tiefsee erstickte.',
+
+    l3Title: 'Level 4 · Tiefsee-Ammoniten-Rettung',
+    l3Desc: 'Lenke den treibenden Ammoniten mit Wärmeströmungen durch alle 4 Leuchttore bis zum geschützten Riff! Nutze Schlote & Eis zum Steuern.',
+    l3WinTitle: 'Ammonit gerettet!',
+    l3WinBody: 'Du hast warme Aufwinde und kalte Abwinde perfekt bis ins sichere Riff genutzt!',
+    l3Fact: 'Wissenschaft: Plankton, Larven und Nährstoffe reisen tausende Kilometer auf temperaturgetriebenen Meeresströmungen.',
+
+    l4Title: 'Freies Labor · Thermische Strömungen',
+    l4Desc: 'Male Wärme, Kälte, O₂-Blasen oder Felsbarrieren direkt ins Wasser – oder steuere mit Tasten 1–4 echte Navier–Stokes-Strömungen!',
+
+    stagnantWarn: 'STILLSTAND · WENIG ΔT!',
+    heatwaveAlert: 'VULKAN-HITZEWELLE!',
+    surfaceLbl: 'OBERFLÄCHE · O₂-REICH',
+    abyssLbl: 'TIEFSEEBODEN',
+    clickHint: 'Stationen (1–4) klicken oder im Wasser ziehen',
+  },
+  it: {
+    title: 'Correnti Marine',
+    subtitle: 'Le differenze di temperatura muovono il nastro trasportatore degli oceani',
+    lvl0Tab: '1 · Avvia corrente',
+    lvl1Tab: '2 · Inverti vortice',
+    lvl2Tab: '3 · Caldo Permiano',
+    lvl3Tab: '4 · Salvataggio',
+    lvl4Tab: 'Laboratorio',
+    pyramidBtn: 'Piramide 4 Lati',
+    exitPyramid: '← Esci da Piramide',
+    nextChallenge: 'Prossimo livello',
+    fullscreen: 'Schermo intero',
+    mTempDiff: 'Gradiente ΔT',
+    mFlow: 'Corrente',
+    mDeepO2: 'O₂ Profondo',
+    st0: 'Camino Ovest 🔥',
+    st1: 'Ghiaccio Est ❄️',
+    st2: 'Camino Est 🔥',
+    st3: 'Ghiaccio Ovest ❄️',
+    toolHeat: '🔥 Disegna Caldo',
+    toolCold: '❄️ Disegna Freddo',
+    toolO2: '🫧 Gocce O₂',
+    toolRock: '🪨 Roccia',
+    toolErase: '🧹 Cancella',
+    presetConveyor: 'Modello: Corrente',
+    presetStall: 'Modello: Blocco',
+    btnArrows: 'Frecce flusso',
+    btnThermal: 'Mappa termica',
+    btnReset: 'Ripristina',
+    btnReplay: 'Rigioca',
+    btnNext: 'Prossimo livello →',
+    btnSandbox: 'Apri Laboratorio →',
+
+    l0Title: 'Livello 1 · Avvia la corrente termica',
+    l0Desc: 'Attiva Camino Ovest (1) + Ghiaccio Est (2) o trascina caldo e freddo: l’acqua calda sale, quella fredda ricca di O₂ affonda e porta 12 bolle al fondale!',
+    l0WinTitle: 'Corrente avviata!',
+    l0WinBody: 'Hai creato un vero ciclo di convezione e salvato la barriera profonda!',
+    l0Fact: 'Scienza: L’acqua calda è più leggera e sale; l’acqua fredda superficiale è più densa, affonda e trasporta ossigeno disciolto fino agli abissi.',
+
+    l1Title: 'Livello 2 · Inverti il vortice',
+    l1Desc: 'Una dorsale rocciosa divide il fondale! Ossigena ENTRAMBE le colonie (6 O₂ ciascuna) alternando corrente oraria (1+2) e antioraria (3+4).',
+    l1WinTitle: 'Maestro delle correnti!',
+    l1WinBody: 'Entrambi i versanti della dorsale prosperano grazie all’ossigeno fresco.',
+    l1Fact: 'Scienza: Cambiando dove l’acqua si scalda e dove si raffredda si inverte l’intero senso della circolazione oceanica.',
+
+    l2Title: 'Livello 3 · Ondata di calore Permiana!',
+    l2Desc: 'Le eruzioni scaldano l’oceano e riducono ΔT! Mantieni attivo il raffreddamento polare (2 e 4) e resisti 30 s con almeno 2 barriere vive!',
+    l2WinTitle: 'Circolazione salvata!',
+    l2WinBody: 'Il raffreddamento polare ha mantenuto attivo il gradiente termico durante la crisi vulcanica!',
+    l2FailTitle: 'Oceano stagnante (Anossia)!',
+    l2FailBody: 'Il divario di temperatura è svanito: la circolazione si è fermata e le barriere profonde sono rimaste senza ossigeno.',
+    l2Fact: 'Scienza (~252 Ma): Durante l’estinzione del Permiano–Triassico il super-effetto serra riscaldò i poli, indebolì ΔT e bloccò le correnti oceaniche causando anossia marina.',
+
+    l3Title: 'Livello 4 · Salvataggio dell’Ammonite',
+    l3Desc: 'Guida l’ammonite alla deriva con le correnti termiche attraverso tutti e 4 i varchi luminosi fino al santuario! Usa camini e ghiaccio per deviare il flusso.',
+    l3WinTitle: 'Ammonite salvata!',
+    l3WinBody: 'Hai cavalcato correnti calde ascendenti e fredde discendenti fino al rifugio!',
+    l3Fact: 'Scienza: Plancton, larve e nutrienti viaggiano per migliaia di chilometri spinti dalle correnti termiche oceaniche.',
+
+    l4Title: 'Laboratorio · Fluido Termico Libero',
+    l4Desc: 'Dipingi caldo, freddo, bolle di O₂ o barriere rocciose direttamente nell’acqua – oppure usa i tasti 1–4 per sperimentare la convezione di Navier–Stokes!',
+
+    stagnantWarn: 'STAGNANTE · POCO ΔT!',
+    heatwaveAlert: 'ONDATA VULCANICA!',
+    surfaceLbl: 'SUPERFICIE · RICCA DI O₂',
+    abyssLbl: 'FONDALE ABISSALE',
+    clickHint: 'Premi le stazioni (1–4) o trascina nell’acqua',
+  },
+};
+
+let lang = (() => {
+  const c = (navigator.language || 'en').toLowerCase().slice(0, 2);
+  return I18N[c] ? c : 'en';
+})();
+const tr = k => I18N[lang][k] ?? I18N.en[k] ?? k;
+
+/* ============================================================================
+ * 2. Gentle Procedural Web Audio Feedback (Zero External Assets)
+ * ========================================================================== */
+const SFX = (() => {
+  let ctx = null;
+  let enabled = true;
+  const playTone = (freq, dur, { type = 'sine', gain = 0.05, slide = 0, delay = 0 } = {}) => {
+    if (!enabled) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      ctx ||= new AC();
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      const t0 = ctx.currentTime + delay;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(freq, t0);
+      if (slide) o.frequency.exponentialRampToValueAtTime(slide, t0 + dur);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(gain, t0 + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g).connect(ctx.destination);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    } catch {}
+  };
+  return {
+    get on() { return enabled; },
+    toggle() { enabled = !enabled; return enabled; },
+    bubble() { playTone(520 + Math.random() * 240, 0.11, { type: 'sine', gain: 0.045, slide: 980 }); },
+    toggleSt(warm) { playTone(warm ? 240 : 620, 0.12, { type: 'triangle', gain: 0.04, slide: warm ? 340 : 420 }); },
+    ring() { playTone(587, 0.14, { gain: 0.055 }); playTone(880, 0.22, { gain: 0.055, delay: 0.07 }); },
+    win() { [523, 659, 784, 1046].forEach((f, i) => playTone(f, 0.26, { gain: 0.055, delay: i * 0.08 })); },
+    fail() { playTone(310, 0.22, { type: 'triangle', gain: 0.05, slide: 185 }); },
+  };
+})();
+
+/* ============================================================================
+ * 3. Real-Time 2D Navier–Stokes + Boussinesq Thermal Buoyancy Fluid Engine
+ * ========================================================================== */
+const NX = 96, NY = 54;
+const SIZE = NX * NY;
+const IX = (x, y) => x + y * NX;
+
+class ThermalFluid {
+  constructor() {
+    this.u = new Float32Array(SIZE);
+    this.v = new Float32Array(SIZE);
+    this.u0 = new Float32Array(SIZE);
+    this.v0 = new Float32Array(SIZE);
+    this.T = new Float32Array(SIZE);    // -1 (0°C ice) .. 0 (14°C neutral) .. +1 (32°C hot)
+    this.T0 = new Float32Array(SIZE);
+    this.O2 = new Float32Array(SIZE);   // 0..1 dissolved oxygen
+    this.O20 = new Float32Array(SIZE);
+    this.div = new Float32Array(SIZE);
+    this.p = new Float32Array(SIZE);
+    this.solid = new Uint8Array(SIZE);  // 1 = seafloor rock / obstacle
+    this.reset();
+  }
+
+  reset() {
+    this.u.fill(0); this.v.fill(0);
+    this.T.fill(0);
+    this.solid.fill(0);
+    // Natural surface-rich oxygen gradient at start
+    for (let y = 0; y < NY; y++) {
+      const o2Val = Math.max(0.18, 1.0 - (y / NY) * 0.82);
+      for (let x = 0; x < NX; x++) this.O2[IX(x, y)] = o2Val;
+    }
+    // Tank outer solid walls (left, right, bottom; top is free surface)
+    for (let x = 0; x < NX; x++) this.solid[IX(x, NY - 1)] = 1;
+    for (let y = 0; y < NY; y++) {
+      this.solid[IX(0, y)] = 1;
+      this.solid[IX(NX - 1, y)] = 1;
+    }
+  }
+
+  addRockCircle(cx, cy, r, val = 1) {
+    const r2 = r * r;
+    for (let y = 2; y < NY - 1; y++) {
+      for (let x = 1; x < NX - 1; x++) {
+        const dx = x - cx, dy = y - cy;
+        if (dx * dx + dy * dy <= r2) {
+          const id = IX(x, y);
+          this.solid[id] = val;
+          if (val) { this.u[id] = 0; this.v[id] = 0; }
+        }
+      }
+    }
+  }
+
+  injectHeat(nx, ny, radius, targetTemp, strength) {
+    const cx = nx * (NX - 1), cy = ny * (NY - 1);
+    const r2 = radius * radius;
+    const x0 = Math.max(1, Math.floor(cx - radius)), x1 = Math.min(NX - 2, Math.ceil(cx + radius));
+    const y0 = Math.max(1, Math.floor(cy - radius)), y1 = Math.min(NY - 2, Math.ceil(cy + radius));
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const id = IX(x, y);
+        if (this.solid[id]) continue;
+        const d2 = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+        if (d2 > r2) continue;
+        const w = (1 - d2 / r2) * strength;
+        this.T[id] += (targetTemp - this.T[id]) * Math.min(1, w);
+        // Subtle natural convective push from intense thermal source
+        this.v[id] += -targetTemp * w * 1.4;
+      }
+    }
+  }
+
+  injectO2(nx, ny, radius, amount) {
+    const cx = nx * (NX - 1), cy = ny * (NY - 1);
+    const r2 = radius * radius;
+    for (let y = Math.max(1, Math.floor(cy - radius)); y <= Math.min(NY - 2, Math.ceil(cy + radius)); y++) {
+      for (let x = Math.max(1, Math.floor(cx - radius)); x <= Math.min(NX - 2, Math.ceil(cx + radius)); x++) {
+        const id = IX(x, y);
+        if (this.solid[id]) continue;
+        const d2 = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+        if (d2 <= r2) this.O2[id] = Math.min(1, this.O2[id] + (1 - d2 / r2) * amount);
+      }
+    }
+  }
+
+  sampleVel(nx, ny) {
+    const gx = Math.max(1, Math.min(NX - 2.001, nx * (NX - 1)));
+    const gy = Math.max(1, Math.min(NY - 2.001, ny * (NY - 1)));
+    const x0 = Math.floor(gx), y0 = Math.floor(gy);
+    const fx = gx - x0, fy = gy - y0;
+    const i00 = IX(x0, y0), i10 = i00 + 1, i01 = i00 + NX, i11 = i01 + 1;
+    const u = (this.u[i00]*(1-fx) + this.u[i10]*fx)*(1-fy) + (this.u[i01]*(1-fx) + this.u[i11]*fx)*fy;
+    const v = (this.v[i00]*(1-fx) + this.v[i10]*fx)*(1-fy) + (this.v[i01]*(1-fx) + this.v[i11]*fx)*fy;
+    return [u, v];
+  }
+
+  sampleScalar(arr, nx, ny) {
+    const gx = Math.max(1, Math.min(NX - 2.001, nx * (NX - 1)));
+    const gy = Math.max(1, Math.min(NY - 2.001, ny * (NY - 1)));
+    const x0 = Math.floor(gx), y0 = Math.floor(gy);
+    const fx = gx - x0, fy = gy - y0;
+    const i00 = IX(x0, y0), i10 = i00 + 1, i01 = i00 + NX, i11 = i01 + 1;
+    return (arr[i00]*(1-fx) + arr[i10]*fx)*(1-fy) + (arr[i01]*(1-fx) + arr[i11]*fx)*fy;
+  }
+
+  applyBoundaries() {
+    const { u, v, solid } = this;
+    for (let x = 0; x < NX; x++) {
+      // Free-slip surface at y=0 (water glides freely along surface!)
+      u[IX(x, 0)] = u[IX(x, 1)];
+      v[IX(x, 0)] = 0;
+      u[IX(x, NY - 1)] = 0;
+      v[IX(x, NY - 1)] = 0;
+    }
+    for (let y = 0; y < NY; y++) {
+      u[IX(0, y)] = 0; v[IX(0, y)] = 0;
+      u[IX(NX - 1, y)] = 0; v[IX(NX - 1, y)] = 0;
+    }
+    for (let i = 0; i < SIZE; i++) {
+      if (solid[i]) { u[i] = 0; v[i] = 0; }
+    }
+  }
+
+  project() {
+    const { u, v, div, p, solid } = this;
+    for (let y = 1; y < NY - 1; y++) {
+      for (let x = 1; x < NX - 1; x++) {
+        const i = IX(x, y);
+        if (solid[i]) { div[i] = 0; p[i] = 0; continue; }
+        div[i] = -0.5 * (u[i + 1] - u[i - 1] + v[i + NX] - v[i - NX]);
+        p[i] = 0;
+      }
+    }
+    for (let iter = 0; iter < 16; iter++) {
+      for (let y = 1; y < NY - 1; y++) {
+        for (let x = 1; x < NX - 1; x++) {
+          const i = IX(x, y);
+          if (solid[i]) continue;
+          let sum = div[i], cnt = 0;
+          if (!solid[i - 1])  { sum += p[i - 1];  cnt++; }
+          if (!solid[i + 1])  { sum += p[i + 1];  cnt++; }
+          if (!solid[i - NX]) { sum += p[i - NX]; cnt++; }
+          if (!solid[i + NX]) { sum += p[i + NX]; cnt++; }
+          p[i] = cnt > 0 ? sum / cnt : 0;
+        }
+      }
+    }
+    for (let y = 1; y < NY - 1; y++) {
+      for (let x = 1; x < NX - 1; x++) {
+        const i = IX(x, y);
+        if (solid[i]) continue;
+        const pL = solid[i - 1] ? p[i] : p[i - 1];
+        const pR = solid[i + 1] ? p[i] : p[i + 1];
+        const pU = solid[i - NX] ? p[i] : p[i - NX];
+        const pD = solid[i + NX] ? p[i] : p[i + NX];
+        u[i] -= 0.5 * (pR - pL);
+        v[i] -= 0.5 * (pD - pU);
+      }
+    }
+    this.applyBoundaries();
+  }
+
+  advect(dst, src, u, v, dt, damp = 1.0) {
+    const { solid } = this;
+    for (let y = 1; y < NY - 1; y++) {
+      for (let x = 1; x < NX - 1; x++) {
+        const i = IX(x, y);
+        if (solid[i]) { dst[i] = 0; continue; }
+        let px = x - dt * u[i];
+        let py = y - dt * v[i];
+        px = Math.max(0.5, Math.min(NX - 1.5, px));
+        py = Math.max(0.5, Math.min(NY - 1.5, py));
+        const x0 = Math.floor(px), y0 = Math.floor(py);
+        const fx = px - x0, fy = py - y0;
+        const i00 = IX(x0, y0), i10 = i00 + 1, i01 = i00 + NX, i11 = i01 + 1;
+        const val = (src[i00]*(1-fx) + src[i10]*fx)*(1-fy) + (src[i01]*(1-fx) + src[i11]*fx)*fy;
+        dst[i] = val * damp;
+      }
+    }
+  }
+
+  diffuseField(dst, src, rate) {
+    const { solid } = this;
+    for (let y = 1; y < NY - 1; y++) {
+      for (let x = 1; x < NX - 1; x++) {
+        const i = IX(x, y);
+        if (solid[i]) continue;
+        const avg = 0.25 * (src[i-1] + src[i+1] + src[i-NX] + src[i+NX]);
+        dst[i] = src[i] + (avg - src[i]) * rate;
+      }
+    }
+  }
+
+  step(dt, ambientTemp = 0.0) {
+    const { u, v, u0, v0, T, T0, O2, O20, solid } = this;
+
+    // 1. Compute mean fluid temperature for exact Boussinesq buoyancy (T - T_avg)!
+    //    Notice: if the ENTIRE tank warms up uniformly, (T - T_avg) -> 0 and convection NATURALLY STALLS!
+    let tSum = 0, tCnt = 0;
+    for (let i = 0; i < SIZE; i++) {
+      if (!solid[i]) { tSum += T[i]; tCnt++; }
+    }
+    const tAvg = tCnt > 0 ? tSum / tCnt : 0;
+
+    // 2. Apply Boussinesq vertical buoyancy force: warm rises (-Y), cold sinks (+Y)!
+    const BUOY = 24.0;
+    for (let y = 1; y < NY - 1; y++) {
+      for (let x = 1; x < NX - 1; x++) {
+        const i = IX(x, y);
+        if (solid[i]) continue;
+        v[i] -= BUOY * (T[i] - tAvg) * dt;
+        // Clamp extreme speeds for unconditional stability
+        u[i] = Math.max(-28, Math.min(28, u[i]));
+        v[i] = Math.max(-28, Math.min(28, v[i]));
+      }
+    }
+
+    // 3. Project velocity to divergence-free (creates real closed circulation loops!)
+    this.project();
+
+    // 4. Advect velocity
+    u0.set(u); v0.set(v);
+    this.advect(u, u0, u0, v0, dt, 0.992);
+    this.advect(v, v0, u0, v0, dt, 0.992);
+    this.project();
+
+    // 5. Advect & gently diffuse Temperature
+    T0.set(T);
+    this.advect(T, T0, u, v, dt, 1.0);
+    T0.set(T);
+    this.diffuseField(T, T0, 0.055);
+    // Gentle thermal relaxation toward ambient background temperature
+    const relax = 0.0045;
+    for (let i = 0; i < SIZE; i++) {
+      if (!solid[i]) T[i] += (ambientTemp - T[i]) * relax;
+    }
+
+    // 6. Advect & replenish surface Dissolved Oxygen (O2)!
+    //    Surface layer absorbs fresh O2 from the atmosphere; deep abyss slowly consumes O2.
+    for (let x = 1; x < NX - 1; x++) {
+      O2[IX(x, 1)] = Math.min(1.0, O2[IX(x, 1)] + 0.14 * dt * 60 * 0.04);
+      O2[IX(x, 2)] = Math.min(1.0, O2[IX(x, 2)] + 0.07 * dt * 60 * 0.04);
+    }
+    O20.set(O2);
+    this.advect(O2, O20, u, v, dt, 1.0);
+    O20.set(O2);
+    this.diffuseField(O2, O20, 0.03);
+    // Deep benthic respiration slowly consumes O2 so stagnant deep water becomes hypoxic!
+    for (let y = Math.floor(NY * 0.55); y < NY - 1; y++) {
+      const depthF = (y - NY * 0.55) / (NY * 0.45);
+      for (let x = 1; x < NX - 1; x++) {
+        const i = IX(x, y);
+        if (!solid[i]) O2[i] = Math.max(0.02, O2[i] - (0.0018 + 0.0022 * depthF));
+      }
+    }
+  }
+
+  getMetrics() {
+    let minT = 10, maxT = -10, spdSum = 0, spdCnt = 0, deepO2Sum = 0, deepCnt = 0;
+    const deepY = Math.floor(NY * 0.72);
+    for (let y = 2; y < NY - 2; y++) {
+      for (let x = 2; x < NX - 2; x++) {
+        const i = IX(x, y);
+        if (this.solid[i]) continue;
+        const t = this.T[i];
+        if (t < minT) minT = t;
+        if (t > maxT) maxT = t;
+        spdSum += Math.hypot(this.u[i], this.v[i]);
+        spdCnt++;
+        if (y >= deepY) { deepO2Sum += this.O2[i]; deepCnt++; }
+      }
+    }
+    // Map T in [-1..+1] to realistic ocean °C range (2°C polar .. 30°C hot vent/tropics)
+    const dT = Math.max(0, (maxT - minT) * 14.0);
+    const flowCm = spdCnt > 0 ? (spdSum / spdCnt) * 8.5 : 0;
+    const deepO2 = deepCnt > 0 ? (deepO2Sum / deepCnt) * 100 : 0;
+    return { dT, flowCm, deepO2 };
+  }
+}
+
+/* ============================================================================
+ * 4. Game State, Levels, Stations, Oxygen Bubbles, Creatures & Particles
+ * ========================================================================== */
+const fluid = new ThermalFluid();
+
+// 4 Corner Thermal Stations (matching Holo Stage colors & keys 1-4!)
+const STATIONS = [
+  { id: 0, nx: 0.14, ny: 0.87, temp: +1.0, color: '#ff4b3e', label: '1', kind: 'vent', active: false, hold: false },
+  { id: 1, nx: 0.86, ny: 0.10, temp: -1.0, color: '#2f9bff', label: '2', kind: 'ice',  active: false, hold: false },
+  { id: 2, nx: 0.86, ny: 0.87, temp: +1.0, color: '#3ddc6a', label: '3', kind: 'vent', active: false, hold: false },
+  { id: 3, nx: 0.14, ny: 0.10, temp: -1.0, color: '#ffd028', label: '4', kind: 'ice',  active: false, hold: false },
+];
+
+// 1,350 Luminous Flow Tracer Particles (colored live by local water temperature!)
+const N_PARTS = 1350;
+const parts = Array.from({ length: N_PARTS }, () => ({
+  x: 0.03 + Math.random() * 0.94,
+  y: 0.04 + Math.random() * 0.90,
+  px: 0, py: 0,
+  life: Math.random(),
+}));
+parts.forEach(p => { p.px = p.x; p.py = p.y; });
+
+// Drifting Oxygen Bubbles carried by real currents!
+const bubbles = [];
+const bursts = [];
+
+// Game state
+const game = {
+  level: 0,        // 0..3 challenges, 4 = sandbox
+  tool: 'heat',    // sandbox paint tool: heat | cold | o2 | rock | erase
+  showArrows: false,
+  showThermal: true,
+  pyramid: false,
+  elapsed: 0,
+  ended: false,    // 'win' | 'fail' | false
+  reefs: [],
+  ammonite: null,  // Level 4 hero drifter
+  gates: [],       // Level 4 current checkpoints
+  heatwaveTimer: 0,
+  surviveTimer: 0,
+  surviveGoal: 30,
+  bubbleSpawnAcc: 0,
+  metrics: { dT: 0, flowCm: 0, deepO2: 50 },
+};
+
+function setupLevel(lvl) {
+  game.level = lvl;
+  game.elapsed = 0;
+  game.ended = false;
+  game.heatwaveTimer = 0;
+  game.surviveTimer = 0;
+  bubbles.length = 0;
+  bursts.length = 0;
+  game.reefs = [];
+  game.ammonite = null;
+  game.gates = [];
+
+  fluid.reset();
+  STATIONS.forEach(s => { s.active = false; s.hold = false; });
+
+  // Sculpt organic seafloor contour
+  for (let x = 1; x < NX - 1; x++) {
+    const nx = x / (NX - 1);
+    let h = 2 + Math.round(Math.sin(nx * Math.PI * 3.0 + 0.4) * 1.2);
+    // Level 2: dramatic central Permian seamount ridge splitting the abyss!
+    if (lvl === 1) {
+      const d = Math.abs(nx - 0.50);
+      if (d < 0.13) h += Math.round((1 - d / 0.13) ** 1.4 * 22);
+    }
+    // Level 4: two staggered underwater rock pillars to steer currents around!
+    if (lvl === 3) {
+      const d1 = Math.abs(nx - 0.34);
+      const d2 = Math.abs(nx - 0.68);
+      if (d1 < 0.08) h += Math.round((1 - d1 / 0.08) * 14);
+      if (d2 < 0.08) h += Math.round((1 - d2 / 0.08) * 16);
+    }
+    for (let y = NY - 1 - h; y < NY; y++) fluid.solid[IX(x, y)] = 1;
+  }
+
+  // Configure level-specific reefs, goals & initial thermal conditions
+  if (lvl === 0) {
+    // Level 1: Single deep-sea Permian reef needing 12 O2 bubbles
+    game.reefs.push({ x: 0.50, y: 0.87, r: 0.08, fed: 0, goal: 12, o2: 0.45, kind: 'trilobite' });
+  } else if (lvl === 1) {
+    // Level 2: Two sheltered reefs on opposite sides of the seamount!
+    game.reefs.push({ x: 0.28, y: 0.86, r: 0.075, fed: 0, goal: 6, o2: 0.45, kind: 'coral' });
+    game.reefs.push({ x: 0.72, y: 0.86, r: 0.075, fed: 0, goal: 6, o2: 0.45, kind: 'ammonite' });
+  } else if (lvl === 2) {
+    // Level 3: Permian Heatwave survival — start with a healthy conveyor already running, then defend it!
+    STATIONS[0].active = true;
+    STATIONS[1].active = true;
+    game.reefs.push({ x: 0.28, y: 0.87, r: 0.07, fed: 0, goal: 99, o2: 0.82, kind: 'coral' });
+    game.reefs.push({ x: 0.50, y: 0.87, r: 0.07, fed: 0, goal: 99, o2: 0.85, kind: 'trilobite' });
+    game.reefs.push({ x: 0.72, y: 0.87, r: 0.07, fed: 0, goal: 99, o2: 0.82, kind: 'ammonite' });
+    // Pre-seed warm left / cool right gradient
+    for (let y = 2; y < NY - 3; y++) {
+      for (let x = 2; x < NX - 2; x++) {
+        const i = IX(x, y);
+        if (!fluid.solid[i]) {
+          fluid.T[i] = ((NX / 2 - x) / (NX / 2)) * 0.45;
+          fluid.O2[i] = 0.75;
+        }
+      }
+    }
+  } else if (lvl === 3) {
+    // Level 4: Steer drifting Ammonite through 4 glowing current gates to sanctuary!
+    game.ammonite = { x: 0.16, y: 0.72, vx: 0, vy: 0, angle: 0, trail: [] };
+    game.gates = [
+      { x: 0.22, y: 0.30, r: 0.068, hit: false },
+      { x: 0.50, y: 0.24, r: 0.068, hit: false },
+      { x: 0.82, y: 0.38, r: 0.068, hit: false },
+      { x: 0.52, y: 0.74, r: 0.072, hit: false },
+    ];
+    game.reefs.push({ x: 0.52, y: 0.87, r: 0.075, fed: 0, goal: 1, o2: 0.9, kind: 'coral' });
+  } else {
+    // Sandbox: pre-seed a lively classic conveyor so it's immediately mesmerizing!
+    STATIONS[0].active = true;
+    STATIONS[1].active = true;
+    game.reefs.push({ x: 0.50, y: 0.88, r: 0.07, fed: 0, goal: 0, o2: 0.85, kind: 'coral' });
+  }
+
+  parts.forEach(p => {
+    p.x = 0.04 + Math.random() * 0.92;
+    p.y = 0.05 + Math.random() * 0.86;
+    p.px = p.x; p.py = p.y;
+  });
+
+  document.getElementById('modal').hidden = true;
+  syncUI();
+}
+
+function showModal(win, titleKey, bodyKey, factKey) {
+  game.ended = win ? 'win' : 'fail';
+  if (win) SFX.win(); else SFX.fail();
+  document.getElementById('modalTitle').textContent = tr(titleKey);
+  document.getElementById('modalBody').textContent = tr(bodyKey);
+  document.getElementById('modalFact').textContent = tr(factKey);
+  const nextBtn = document.getElementById('modalNext');
+  nextBtn.hidden = !win;
+  nextBtn.textContent = game.level < 3 ? tr('btnNext') : tr('btnSandbox');
+  document.getElementById('modal').hidden = false;
+}
+
+/* ============================================================================
+ * 5. Simulation Tick
+ * ========================================================================== */
+let pointer = { down: false, nx: 0.5, ny: 0.5, px: 0.5, py: 0.5 };
+
+function stepSimulation(dt) {
+  game.elapsed += dt;
+
+  // 1. Apply active Thermal Stations (either toggled on screen or held via button/key/gamepad!)
+  for (const s of STATIONS) {
+    if (s.active || s.hold) {
+      fluid.injectHeat(s.nx, s.ny, 6.2, s.temp, 0.36);
+      // Cold polar ice caps enrich sinking surface water with dissolved O2!
+      if (s.kind === 'ice') fluid.injectO2(s.nx, s.ny + 0.04, 7.0, 0.25);
+    }
+  }
+
+  // 2. Direct mouse/touch interaction in the tank!
+  if (pointer.down) {
+    if (game.level === 4) {
+      // Sandbox paint tools
+      if (game.tool === 'heat') fluid.injectHeat(pointer.nx, pointer.ny, 5.2, +1.0, 0.48);
+      else if (game.tool === 'cold') {
+        fluid.injectHeat(pointer.nx, pointer.ny, 5.2, -1.0, 0.48);
+        fluid.injectO2(pointer.nx, pointer.ny, 5.5, 0.22);
+      } else if (game.tool === 'o2') {
+        fluid.injectO2(pointer.nx, pointer.ny, 5.5, 0.35);
+        if (Math.random() < 0.45 && bubbles.length < 70) {
+          bubbles.push({ x: pointer.nx, y: pointer.ny, life: 1.0, r: 4.5 + Math.random() * 2.5 });
+        }
+      } else if (game.tool === 'rock') {
+        fluid.addRockCircle(pointer.nx * (NX - 1), pointer.ny * (NY - 1), 3.0, 1);
+      } else if (game.tool === 'erase') {
+        fluid.addRockCircle(pointer.nx * (NX - 1), pointer.ny * (NY - 1), 4.2, 0);
+      }
+    } else {
+      // In Challenge Levels: dragging near the top chills water, dragging near the bottom warms water!
+      const isCold = pointer.ny < 0.46;
+      fluid.injectHeat(pointer.nx, pointer.ny, 5.0, isCold ? -0.95 : +0.95, 0.35);
+      if (isCold) fluid.injectO2(pointer.nx, pointer.ny, 5.5, 0.16);
+    }
+  }
+
+  // 3. Level 3 — Permian Volcanic Heatwave events!
+  let ambientT = 0.0;
+  let surgeActive = false;
+  if (game.level === 2 && !game.ended) {
+    game.heatwaveTimer += dt;
+    // Periodic volcanic super-greenhouse waves warm the surface & seafloor, trying to collapse ΔT!
+    const wave = Math.sin(game.elapsed * 0.65);
+    surgeActive = wave > 0.25;
+    ambientT = 0.35 + 0.45 * Math.max(0, wave);
+    if (surgeActive) {
+      fluid.injectHeat(0.50, 0.90, 8.0, +1.0, 0.22);
+      fluid.injectHeat(0.32, 0.06, 12.0, +0.85, 0.08);
+      fluid.injectHeat(0.68, 0.06, 12.0, +0.85, 0.08);
+    }
+  }
+
+  // 4. Step real Navier–Stokes + Boussinesq solver
+  fluid.step(dt * 1.15, ambientT);
+  game.metrics = fluid.getMetrics();
+
+  // 5. Advect 1,350 glowing streamline flow particles
+  for (let i = 0; i < N_PARTS; i++) {
+    const p = parts[i];
+    p.px = p.x; p.py = p.y;
+    const [u, v] = fluid.sampleVel(p.x, p.y);
+    p.x += (u / NX) * dt * 1.85;
+    p.y += (v / NY) * dt * 1.85;
+    p.life += dt * 0.22;
+    const gx = Math.floor(p.x * (NX - 1)), gy = Math.floor(p.y * (NY - 1));
+    const bad = p.x <= 0.015 || p.x >= 0.985 || p.y <= 0.02 || p.y >= 0.96
+             || p.life > 1.0 || (gx >= 0 && gx < NX && gy >= 0 && gy < NY && fluid.solid[IX(gx, gy)]);
+    if (bad) {
+      p.x = 0.03 + Math.random() * 0.94;
+      p.y = 0.04 + Math.random() * 0.88;
+      // Avoid spawning inside rocks
+      const sx = Math.floor(p.x * (NX - 1)), sy = Math.floor(p.y * (NY - 1));
+      if (fluid.solid[IX(sx, sy)]) p.y = 0.12 + Math.random() * 0.30;
+      p.px = p.x; p.py = p.y;
+      p.life = 0;
+    }
+  }
+
+  // 6. Spawn & Advect Oxygen Bubbles (entrained by sinking cold currents!)
+  game.bubbleSpawnAcc += dt;
+  if (game.bubbleSpawnAcc > 0.24 && bubbles.length < 48) {
+    game.bubbleSpawnAcc = 0;
+    // Prefer spawning where surface water is cold & sinking (real gas solubility + downwelling!)
+    let bestX = 0.10 + Math.random() * 0.80;
+    let bestSink = -1;
+    for (let k = 0; k < 5; k++) {
+      const tx = 0.08 + Math.random() * 0.84;
+      const [, sv] = fluid.sampleVel(tx, 0.11);
+      const st = fluid.sampleScalar(fluid.T, tx, 0.10);
+      const score = sv - st * 1.8;
+      if (score > bestSink) { bestSink = score; bestX = tx; }
+    }
+    if (bestSink > 0.35 || game.level === 4) {
+      bubbles.push({ x: bestX, y: 0.055, life: 1.0, r: 4.0 + Math.random() * 2.5 });
+    }
+  }
+
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    const b = bubbles[i];
+    const [u, v] = fluid.sampleVel(b.x, b.y);
+    // Slight natural buoyancy upward countered easily by real downwelling currents!
+    b.x += (u / NX) * dt * 2.2;
+    b.y += ((v - 0.55) / NY) * dt * 2.2;
+    b.life -= dt * 0.048;
+
+    // Bounce gently off walls/rocks
+    b.x = Math.max(0.02, Math.min(0.98, b.x));
+    b.y = Math.max(0.04, Math.min(0.94, b.y));
+    const gx = Math.floor(b.x * (NX - 1)), gy = Math.floor(b.y * (NY - 1));
+    if (fluid.solid[IX(gx, gy)]) { b.y -= 0.02; }
+
+    // Check reef oxygen delivery!
+    let eaten = false;
+    for (const rf of game.reefs) {
+      if (Math.hypot((b.x - rf.x) * 1.4, b.y - rf.y) < rf.r) {
+        rf.o2 = Math.min(1.0, rf.o2 + 0.16);
+        if (!game.ended && rf.goal > 0 && rf.fed < rf.goal) rf.fed++;
+        SFX.bubble();
+        bursts.push({ x: b.x, y: b.y, r: 0, maxR: 0.055, life: 1.0, col: '#3be8a4' });
+        eaten = true;
+        break;
+      }
+    }
+    if (eaten || b.life <= 0) bubbles.splice(i, 1);
+  }
+
+  // 7. Update Reefs & Check Level Win / Fail Conditions
+  for (const rf of game.reefs) {
+    const localO2 = fluid.sampleScalar(fluid.O2, rf.x, rf.y - 0.05);
+    const localSpd = Math.hypot(...fluid.sampleVel(rf.x, rf.y - 0.05));
+    // Flowing oxygenated water sustains reefs; stagnant warm water suffocates them!
+    const supply = localO2 * (0.35 + Math.min(1.2, localSpd * 0.22));
+    const drain = game.level === 2 ? 0.12 : 0.045;
+    rf.o2 = Math.max(0.0, Math.min(1.0, rf.o2 + (supply - drain - 0.18) * dt * 0.45));
+  }
+
+  // Level 4: Drifting Ammonite Physics!
+  if (game.ammonite && !game.ended) {
+    const am = game.ammonite;
+    const [u, v] = fluid.sampleVel(am.x, am.y);
+    am.vx += ((u / NX) * 2.1 - am.vx) * Math.min(1, dt * 4.5);
+    am.vy += ((v / NY) * 2.1 - am.vy) * Math.min(1, dt * 4.5);
+    const nx = Math.max(0.04, Math.min(0.96, am.x + am.vx * dt));
+    const ny = Math.max(0.07, Math.min(0.90, am.y + am.vy * dt));
+    const gx = Math.floor(nx * (NX - 1)), gy = Math.floor(ny * (NY - 1));
+    if (!fluid.solid[IX(gx, gy)]) { am.x = nx; am.y = ny; }
+    else { am.vx *= -0.4; am.vy *= -0.4; }
+    if (Math.hypot(am.vx, am.vy) > 0.01) am.angle = Math.atan2(am.vy, am.vx);
+    am.trail.push([am.x, am.y]);
+    if (am.trail.length > 36) am.trail.shift();
+
+    for (const g of game.gates) {
+      if (!g.hit && Math.hypot((am.x - g.x) * 1.4, am.y - g.y) < g.r) {
+        g.hit = true;
+        SFX.ring();
+        bursts.push({ x: g.x, y: g.y, r: 0, maxR: 0.08, life: 1.0, col: '#ffd028' });
+      }
+    }
+    if (game.gates.every(g => g.hit)) {
+      showModal(true, 'l3WinTitle', 'l3WinBody', 'l3Fact');
+    }
+  }
+
+  // Check Level 1, 2, 3 goals
+  if (!game.ended) {
+    if (game.level === 0 && game.reefs[0].fed >= game.reefs[0].goal) {
+      showModal(true, 'l0WinTitle', 'l0WinBody', 'l0Fact');
+    } else if (game.level === 1 && game.reefs.every(r => r.fed >= r.goal)) {
+      showModal(true, 'l1WinTitle', 'l1WinBody', 'l1Fact');
+    } else if (game.level === 2) {
+      const alive = game.reefs.filter(r => r.o2 > 0.14).length;
+      if (alive < 2) {
+        showModal(false, 'l2FailTitle', 'l2FailBody', 'l2Fact');
+      } else {
+        game.surviveTimer += dt;
+        if (game.surviveTimer >= game.surviveGoal) {
+          showModal(true, 'l2WinTitle', 'l2WinBody', 'l2Fact');
+        }
+      }
+    }
+  }
+
+  for (let i = bursts.length - 1; i >= 0; i--) {
+    const b = bursts[i];
+    b.life -= dt * 2.2;
+    b.r = (1 - b.life) * b.maxR;
+    if (b.life <= 0) bursts.splice(i, 1);
+  }
+}
+
+/* ============================================================================
+ * 6. Rich Bioluminescent Ocean Cross-Section Canvas Renderer
+ * ========================================================================== */
+const tankCanvas = document.getElementById('tankCanvas');
+const tankCtx = tankCanvas.getContext('2d');
+
+// Offscreen low-res thermal field canvas (bilinearly upscaled smoothly onto the tank!)
+const fieldCanvas = document.createElement('canvas');
+fieldCanvas.width = NX; fieldCanvas.height = NY;
+const fieldCtx = fieldCanvas.getContext('2d');
+const fieldImg = fieldCtx.createImageData(NX, NY);
+
+function tempToColor(t) {
+  // Smooth museum thermal palette: icy cyan (-1) -> deep sea blue (0) -> fiery amber-red (+1)
+  if (t >= 0) {
+    const k = Math.min(1, t);
+    return [
+      Math.round(35 + 220 * k),
+      Math.round(145 + (115 - 145) * k * k + 40 * k * (1 - k)),
+      Math.round(215 * (1 - k) + 32 * k),
+    ];
+  } else {
+    const k = Math.min(1, -t);
+    return [
+      Math.round(35 + 65 * k),
+      Math.round(145 + 100 * k),
+      Math.round(215 + 40 * k),
+    ];
+  }
+}
+
+function renderOceanTo(ctx, W, H, isPyramid = false) {
+  // 1. Deep ocean background (pure black in Pyramid mode so glass reflections pop!)
+  if (isPyramid) {
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0.0, '#071b30');
+    bg.addColorStop(0.32, '#040e1d');
+    bg.addColorStop(1.0, '#02040a');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // 2. Smooth Thermal & Oxygen Field Backdrop
+  const d = fieldImg.data;
+  for (let i = 0; i < SIZE; i++) {
+    const o = i * 4;
+    if (fluid.solid[i]) {
+      d[o] = 24; d[o+1] = 26; d[o+2] = 34; d[o+3] = isPyramid ? 170 : 240;
+      continue;
+    }
+    const t = fluid.T[i];
+    const o2 = fluid.O2[i];
+    if (game.showThermal) {
+      let r = 0, g = 0, b = 0, a = 0;
+      if (t > 0.03) {
+        const k = Math.min(1, t * 1.15);
+        r = 255; g = Math.round(95 + 75 * (1 - k)); b = 26;
+        a = Math.round(k * (isPyramid ? 165 : 145));
+      } else if (t < -0.03) {
+        const k = Math.min(1, -t * 1.15);
+        r = 24; g = Math.round(170 + 75 * k); b = 255;
+        a = Math.round(k * (isPyramid ? 165 : 145));
+      }
+      // Subtle murky anoxic crimson tint in deep oxygen-starved zones!
+      if (o2 < 0.22) {
+        const hyp = (0.22 - o2) / 0.22;
+        r = Math.min(255, r + Math.round(90 * hyp));
+        b = Math.min(255, b + Math.round(45 * hyp));
+        a = Math.max(a, Math.round(85 * hyp));
+      }
+      d[o] = r; d[o+1] = g; d[o+2] = b; d[o+3] = a;
+    } else {
+      d[o] = 0; d[o+1] = 0; d[o+2] = 0; d[o+3] = 0;
+    }
+  }
+  fieldCtx.putImageData(fieldImg, 0, 0);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(fieldCanvas, 0, 0, W, H);
+  ctx.restore();
+
+  // 3. Animated Shimmering Ocean Surface Wave Line
+  ctx.save();
+  ctx.beginPath();
+  for (let x = 0; x <= 60; x++) {
+    const f = x / 60;
+    const px = f * W;
+    const py = H * 0.042 + Math.sin(f * 14 + game.elapsed * 2.6) * (H * 0.006) + Math.cos(f * 23 - game.elapsed * 1.8) * (H * 0.003);
+    if (x === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.strokeStyle = 'rgba(130, 225, 255, 0.55)';
+  ctx.lineWidth = Math.max(1.5, H * 0.004);
+  ctx.stroke();
+  ctx.restore();
+
+  // 4. Smooth Sculpted Seafloor Rock Ridge Silhouette (Anti-aliased!)
+  ctx.save();
+  const cw = W / NX, ch = H / NY;
+  // Find smooth top edge of seafloor rock per column
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  for (let x = 1; x < NX - 1; x++) {
+    let topY = NY - 1;
+    for (let y = NY - 2; y >= 2; y--) {
+      if (fluid.solid[IX(x, y)]) topY = y;
+      else break;
+    }
+    const px = (x + 0.5) * cw;
+    const py = topY * ch;
+    ctx.lineTo(px, py);
+  }
+  ctx.lineTo(W, H);
+  ctx.closePath();
+  const rockGrad = ctx.createLinearGradient(0, H * 0.45, 0, H);
+  rockGrad.addColorStop(0, isPyramid ? '#1a202c' : '#1e2736');
+  rockGrad.addColorStop(1, isPyramid ? '#080a0f' : '#0a0e16');
+  ctx.fillStyle = rockGrad;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(130, 178, 224, 0.36)';
+  ctx.lineWidth = Math.max(1.5, H * 0.0038);
+  ctx.stroke();
+
+  // Also draw any floating sandbox-painted midwater rocks smoothly!
+  ctx.fillStyle = isPyramid ? '#181e29' : '#1c2432';
+  for (let y = 2; y < NY - 2; y++) {
+    for (let x = 1; x < NX - 1; x++) {
+      if (fluid.solid[IX(x, y)] && !fluid.solid[IX(x, y + 1)]) {
+        ctx.beginPath();
+        ctx.arc((x + 0.5) * cw, (y + 0.5) * ch, Math.max(cw, ch) * 0.65, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  ctx.restore();
+
+  // 5. 1,350 Luminous Thermal Current Streamlines!
+  ctx.save();
+  ctx.lineCap = 'round';
+  const lineW = Math.max(1.2, H * 0.0032);
+  for (let i = 0; i < N_PARTS; i++) {
+    const p = parts[i];
+    const dx = (p.x - p.px) * W, dy = (p.y - p.py) * H;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.25 || len > W * 0.08) continue;
+    const t = fluid.sampleScalar(fluid.T, p.x, p.y);
+    const [r, g, b] = tempToColor(t);
+    const env = Math.sin(p.life * Math.PI);
+    const alpha = Math.min(0.92, (0.28 + len * 0.09) * env);
+    ctx.strokeStyle = `rgba(${r},${g},${b},${alpha.toFixed(2)})`;
+    ctx.lineWidth = lineW * (0.7 + Math.min(1.0, len * 0.14));
+    ctx.beginPath();
+    // Extend tail slightly backward so flow direction feels silky and fast!
+    ctx.moveTo(p.px * W - dx * 2.4, p.py * H - dy * 2.4);
+    ctx.lineTo(p.x * W, p.y * H);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // 6. Optional Classroom Velocity Vector Arrows Overlay
+  if (game.showArrows) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+    ctx.lineWidth = Math.max(1, H * 0.0022);
+    for (let gy = 4; gy < NY - 4; gy += 5) {
+      for (let gx = 4; gx < NX - 4; gx += 6) {
+        const idx = IX(gx, gy);
+        if (fluid.solid[idx]) continue;
+        const u = fluid.u[idx], v = fluid.v[idx];
+        const spd = Math.hypot(u, v);
+        if (spd < 0.35) continue;
+        const cx = (gx + 0.5) * cw, cy = (gy + 0.5) * ch;
+        const sc = Math.min(22, spd * 3.8) * (H / 520);
+        const ax = (u / spd) * sc, ay = (v / spd) * sc;
+        ctx.beginPath();
+        ctx.moveTo(cx - ax * 0.4, cy - ay * 0.4);
+        ctx.lineTo(cx + ax * 0.6, cy + ay * 0.6);
+        ctx.stroke();
+        const ang = Math.atan2(ay, ax);
+        const hl = Math.max(4, sc * 0.35);
+        ctx.beginPath();
+        ctx.moveTo(cx + ax * 0.6, cy + ay * 0.6);
+        ctx.lineTo(cx + ax * 0.6 - hl * Math.cos(ang - 0.55), cy + ay * 0.6 - hl * Math.sin(ang - 0.55));
+        ctx.lineTo(cx + ax * 0.6 - hl * Math.cos(ang + 0.55), cy + ay * 0.6 - hl * Math.sin(ang + 0.55));
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  // 7. Draw 4 Corner Thermal Stations (Glowing Vents & Polar Ice Caps!)
+  for (const s of STATIONS) {
+    const sx = s.nx * W, sy = s.ny * H;
+    const on = s.active || s.hold;
+    const rad = Math.max(14, H * 0.044);
+    ctx.save();
+    if (on) {
+      const glow = ctx.createRadialGradient(sx, sy, 2, sx, sy, rad * 2.4);
+      glow.addColorStop(0, s.kind === 'vent' ? 'rgba(255,115,40,0.75)' : 'rgba(65,205,255,0.75)');
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(sx, sy, rad * 2.4, 0, Math.PI * 2); ctx.fill();
+    }
+    if (s.kind === 'vent') {
+      // Sculpted glowing seafloor hydrothermal chimney
+      ctx.beginPath();
+      ctx.moveTo(sx - rad * 0.9, sy + rad * 0.7);
+      ctx.lineTo(sx - rad * 0.42, sy - rad * 0.55);
+      ctx.lineTo(sx + rad * 0.42, sy - rad * 0.55);
+      ctx.lineTo(sx + rad * 0.9, sy + rad * 0.7);
+      ctx.closePath();
+      ctx.fillStyle = on ? '#3a1a12' : '#1b1e26';
+      ctx.fill();
+      ctx.strokeStyle = on ? s.color : 'rgba(255,255,255,0.28)';
+      ctx.lineWidth = Math.max(1.5, H * 0.004);
+      ctx.stroke();
+      // Glowing magma vent lip
+      ctx.fillStyle = on ? '#ffae38' : '#4a352c';
+      ctx.beginPath(); ctx.ellipse(sx, sy - rad * 0.52, rad * 0.36, rad * 0.14, 0, 0, Math.PI * 2); ctx.fill();
+    } else {
+      // Crystalline polar ice cap floating at surface
+      ctx.beginPath();
+      ctx.moveTo(sx - rad * 1.15, sy - rad * 0.22);
+      ctx.lineTo(sx - rad * 0.45, sy - rad * 0.62);
+      ctx.lineTo(sx + rad * 0.35, sy - rad * 0.50);
+      ctx.lineTo(sx + rad * 1.15, sy - rad * 0.15);
+      ctx.lineTo(sx + rad * 0.75, sy + rad * 0.48);
+      ctx.lineTo(sx - rad * 0.70, sy + rad * 0.42);
+      ctx.closePath();
+      ctx.fillStyle = on ? '#9de9ff' : '#2c4157';
+      ctx.fill();
+      ctx.strokeStyle = on ? s.color : 'rgba(180,225,255,0.35)';
+      ctx.lineWidth = Math.max(1.5, H * 0.004);
+      ctx.stroke();
+    }
+    // Player-color badge dot + number
+    ctx.fillStyle = s.color;
+    ctx.beginPath(); ctx.arc(sx, sy + (s.kind === 'vent' ? rad * 0.15 : -rad * 0.02), rad * 0.34, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#070a10';
+    ctx.font = `800 ${Math.round(rad * 0.48)}px system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(s.label, sx, sy + (s.kind === 'vent' ? rad * 0.17 : 0));
+    ctx.restore();
+  }
+
+  // 8. Draw Permian Deep-Sea Reefs (Crinoids bending in local flow, Corals, Trilobites & Health Rings!)
+  for (const rf of game.reefs) {
+    const rx = rf.x * W, ry = rf.y * H;
+    const rad = rf.r * H * 0.78;
+    const [lu] = fluid.sampleVel(rf.x, rf.y - 0.05);
+    const sway = Math.max(-0.55, Math.min(0.55, lu * 0.08)) + Math.sin(game.elapsed * 2.4 + rf.x * 10) * 0.08;
+    const healthy = rf.o2 > 0.35;
+    const col = rf.o2 > 0.45 ? '#3be8a4' : (rf.o2 > 0.22 ? '#ffb845' : '#ff4646');
+
+    ctx.save();
+    // Soft bioluminescent reef aura
+    const aura = ctx.createRadialGradient(rx, ry, 2, rx, ry, rad * 1.9);
+    aura.addColorStop(0, healthy ? 'rgba(59,232,164,0.36)' : 'rgba(255,80,60,0.34)');
+    aura.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = aura;
+    ctx.beginPath(); ctx.arc(rx, ry, rad * 1.9, 0, Math.PI * 2); ctx.fill();
+
+    // Swaying Permian sea-lilies (crinoids) bending directly with the water current!
+    ctx.strokeStyle = col;
+    ctx.lineWidth = Math.max(1.8, H * 0.0042);
+    for (let k = -2; k <= 2; k++) {
+      const bx = rx + k * rad * 0.32;
+      const stalkH = rad * (0.85 + (k % 2 === 0 ? 0.32 : 0.08));
+      const tx = bx + sway * stalkH * 1.1;
+      const ty = ry - stalkH;
+      ctx.beginPath();
+      ctx.moveTo(bx, ry + rad * 0.22);
+      ctx.quadraticCurveTo(bx + sway * stalkH * 0.4, ry - stalkH * 0.5, tx, ty);
+      ctx.stroke();
+      // Feathery crown
+      ctx.beginPath();
+      ctx.arc(tx, ty, rad * 0.14, 0, Math.PI * 2);
+      ctx.fillStyle = col;
+      ctx.fill();
+    }
+
+    // Crisp circular O2 / Goal Ring around reef
+    ctx.lineWidth = Math.max(2.2, H * 0.0055);
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.beginPath(); ctx.arc(rx, ry - rad * 0.25, rad * 1.12, 0, Math.PI * 2); ctx.stroke();
+    const frac = (game.level === 0 || game.level === 1) ? Math.min(1, rf.fed / rf.goal) : rf.o2;
+    ctx.strokeStyle = col;
+    ctx.beginPath();
+    ctx.arc(rx, ry - rad * 0.25, rad * 1.12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac);
+    ctx.stroke();
+
+    if (game.level === 0 || game.level === 1) {
+      ctx.fillStyle = '#fff';
+      ctx.font = `700 ${Math.max(10, Math.round(H * 0.024))}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(`${rf.fed}/${rf.goal} O₂`, rx, ry + rad * 0.62);
+    }
+    ctx.restore();
+  }
+
+  // 9. Level 4: Checkpoints & Bioluminescent Drifting Ammonite!
+  for (const g of game.gates) {
+    const gx = g.x * W, gy = g.y * H, gr = g.r * H * 0.65;
+    ctx.save();
+    ctx.strokeStyle = g.hit ? '#3be8a4' : '#ffd028';
+    ctx.lineWidth = Math.max(2, H * 0.005);
+    ctx.setLineDash(g.hit ? [] : [6, 5]);
+    ctx.beginPath(); ctx.arc(gx, gy, gr, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    if (g.hit) {
+      ctx.fillStyle = 'rgba(59,232,164,0.22)';
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  if (game.ammonite) {
+    const am = game.ammonite;
+    // Glowing drift wake trail
+    if (am.trail.length > 2) {
+      ctx.save();
+      ctx.beginPath();
+      am.trail.forEach(([tx, ty], idx) => {
+        if (idx === 0) ctx.moveTo(tx * W, ty * H); else ctx.lineTo(tx * W, ty * H);
+      });
+      ctx.strokeStyle = 'rgba(255, 215, 95, 0.45)';
+      ctx.lineWidth = Math.max(2, H * 0.005);
+      ctx.stroke();
+      ctx.restore();
+    }
+    const ax = am.x * W, ay = am.y * H, ar = Math.max(11, H * 0.028);
+    ctx.save();
+    ctx.translate(ax, ay);
+    ctx.rotate(am.angle);
+    // Spiral shell
+    const gA = ctx.createRadialGradient(0, 0, 2, 0, 0, ar * 1.9);
+    gA.addColorStop(0, 'rgba(255, 208, 70, 0.65)');
+    gA.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gA;
+    ctx.beginPath(); ctx.arc(0, 0, ar * 1.9, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#f5b95b';
+    ctx.strokeStyle = '#6c3c12';
+    ctx.lineWidth = Math.max(1.5, ar * 0.12);
+    ctx.beginPath(); ctx.arc(0, 0, ar, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // Spiral inner curve
+    ctx.beginPath();
+    for (let a = 0; a < Math.PI * 4; a += 0.25) {
+      const r = ar * 0.14 * (a / (Math.PI * 0.8));
+      const sx = Math.cos(a) * r, sy = Math.sin(a) * r;
+      if (a === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+    }
+    ctx.stroke();
+    // Cute tentacles & bright eye
+    ctx.strokeStyle = '#ffd996';
+    for (let k = -1; k <= 1; k++) {
+      ctx.beginPath();
+      ctx.moveTo(ar * 0.8, k * ar * 0.26);
+      ctx.quadraticCurveTo(ar * 1.35, k * ar * 0.4 + Math.sin(game.elapsed * 8 + k) * 3, ar * 1.65, k * ar * 0.35);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#090c12';
+    ctx.beginPath(); ctx.arc(ar * 0.55, -ar * 0.25, ar * 0.16, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // 10. Glowing Dissolved Oxygen Bubbles (O₂)
+  for (const b of bubbles) {
+    const bx = b.x * W, by = b.y * H;
+    const br = b.r * (H / 540);
+    ctx.save();
+    const g = ctx.createRadialGradient(bx - br * 0.3, by - br * 0.3, 0.5, bx, by, br * 1.6);
+    g.addColorStop(0, '#e8fff7');
+    g.addColorStop(0.45, 'rgba(65, 240, 180, 0.88)');
+    g.addColorStop(1, 'rgba(40, 180, 255, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(bx, by, br * 1.6, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // 11. Oxygen Delivery Sparkle Bursts
+  for (const b of bursts) {
+    ctx.save();
+    ctx.strokeStyle = b.col;
+    ctx.globalAlpha = Math.max(0, b.life);
+    ctx.lineWidth = Math.max(2, H * 0.005);
+    ctx.beginPath(); ctx.arc(b.x * W, b.y * H, b.r * H, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+
+  // 12. Subtle Depth Labels or Stagnation / Heatwave Warning
+  ctx.save();
+  ctx.font = `700 ${Math.max(10, Math.round(H * 0.022))}px system-ui, sans-serif`;
+  if (!isPyramid) {
+    ctx.fillStyle = 'rgba(155, 215, 255, 0.45)';
+    ctx.textAlign = 'center';
+    ctx.fillText(tr('surfaceLbl'), W * 0.5, H * 0.032);
+    ctx.fillStyle = 'rgba(155, 175, 200, 0.38)';
+    ctx.fillText(tr('abyssLbl'), W * 0.5, H * 0.978);
+  }
+  if (game.metrics.dT < 3.2 && game.elapsed > 3.5 && game.level !== 4) {
+    const pulse = 0.55 + 0.45 * Math.sin(game.elapsed * 6);
+    ctx.fillStyle = `rgba(255, 110, 80, ${pulse.toFixed(2)})`;
+    ctx.textAlign = 'center';
+    ctx.font = `800 ${Math.max(12, Math.round(H * 0.036))}px system-ui, sans-serif`;
+    ctx.fillText(tr('stagnantWarn'), W * 0.5, H * 0.50);
+  } else if (game.level === 2 && Math.sin(game.elapsed * 0.65) > 0.35 && !game.ended) {
+    const pulse = 0.6 + 0.4 * Math.sin(game.elapsed * 8);
+    ctx.fillStyle = `rgba(255, 145, 50, ${pulse.toFixed(2)})`;
+    ctx.textAlign = 'center';
+    ctx.font = `800 ${Math.max(12, Math.round(H * 0.034))}px system-ui, sans-serif`;
+    ctx.fillText(tr('heatwaveAlert'), W * 0.5, H * 0.24);
+  }
+  ctx.restore();
+}
+
+/* ============================================================================
+ * 7. 4-Sided Pepper's Ghost Pyramid Mode (Matches Holo Stage Geometry!)
+ * ========================================================================== */
+const PYR_SIDES = ['bottom', 'right', 'top', 'left'];
+const PYR_TRANS = {
+  bottom: 'scaleY(-1)',
+  top:    'scaleX(-1)',
+  left:   'rotate(90deg) scaleY(-1)',
+  right:  'rotate(-90deg) scaleY(-1)',
+};
+const pyrTiles = [];
+
+function initPyramidTiles() {
+  const stage = document.getElementById('pyrStage');
+  stage.innerHTML = '';
+  pyrTiles.length = 0;
+  PYR_SIDES.forEach((side, idx) => {
+    const el = document.createElement('div');
+    el.className = 'pyr-tile';
+    const cv = document.createElement('canvas');
+    cv.width = 480; cv.height = 480;
+    cv.style.transform = PYR_TRANS[side];
+    el.appendChild(cv);
+    // Touching tile i toggles/holds Station i!
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      STATIONS[idx].hold = true;
+      SFX.toggleSt(STATIONS[idx].kind === 'vent');
+    });
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
+      el.addEventListener(ev, () => { STATIONS[idx].hold = false; });
+    }
+    stage.appendChild(el);
+    pyrTiles.push({ el, cv, ctx: cv.getContext('2d'), side, idx });
+  });
+  layoutPyramid();
+}
+
+function layoutPyramid() {
+  if (!game.pyramid) return;
+  const s = Math.min(window.innerWidth, window.innerHeight);
+  const H = s * 0.30;
+  const T = Math.min(s * 0.34, (s - H) / 2);
+  const c = s / 2;
+  const stage = document.getElementById('pyrStage');
+  stage.style.width = `${s}px`; stage.style.height = `${s}px`;
+  const pos = {
+    bottom: [c - T / 2, c + H / 2],
+    top:    [c - T / 2, c - H / 2 - T],
+    left:   [c - H / 2 - T, c - T / 2],
+    right:  [c + H / 2, c - T / 2],
+  };
+  pyrTiles.forEach(t => {
+    const [x, y] = pos[t.side];
+    Object.assign(t.el.style, { left: `${x}px`, top: `${y}px`, width: `${T}px`, height: `${T}px` });
+  });
+}
+
+// Shared square render canvas copied onto all 4 mirrored pyramid faces at 60 fps!
+const pyrSrc = document.createElement('canvas');
+pyrSrc.width = 480; pyrSrc.height = 480;
+const pyrSrcCtx = pyrSrc.getContext('2d');
+
+function renderPyramidFrames() {
+  // Draw compact square ocean cross-section centered in the 480x480 hologram tile
+  pyrSrcCtx.fillStyle = '#000';
+  pyrSrcCtx.fillRect(0, 0, 480, 480);
+  pyrSrcCtx.save();
+  pyrSrcCtx.translate(18, 92);
+  renderOceanTo(pyrSrcCtx, 444, 286, true);
+  pyrSrcCtx.restore();
+
+  // Crisp glowing ΔT + progress pill above the tank inside the hologram
+  pyrSrcCtx.fillStyle = '#ffb75e';
+  pyrSrcCtx.font = '800 22px system-ui, sans-serif';
+  pyrSrcCtx.textAlign = 'center';
+  pyrSrcCtx.fillText(`ΔT ${game.metrics.dT.toFixed(1)} °C   ·   O₂ ${Math.round(game.metrics.deepO2)}%`, 240, 62);
+
+  // Copy to all 4 tiles (each canvas CSS-transformed for its pyramid face!)
+  for (const t of pyrTiles) {
+    t.ctx.clearRect(0, 0, 480, 480);
+    t.ctx.drawImage(pyrSrc, 0, 0);
+    // Subtle corner dot showing which player's button belongs to this face
+    const s = STATIONS[t.idx];
+    t.ctx.fillStyle = s.color;
+    t.ctx.globalAlpha = (s.active || s.hold) ? 1.0 : 0.45;
+    t.ctx.beginPath(); t.ctx.arc(240, 434, (s.active || s.hold) ? 14 : 9, 0, Math.PI * 2); t.ctx.fill();
+    t.ctx.globalAlpha = 1.0;
+  }
+}
+
+/* ============================================================================
+ * 8. UI Sync, Pointer, Keyboard (1–4) & Gamepad Input
+ * ========================================================================== */
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = tr(el.dataset.i18n); });
+  document.querySelectorAll('#langSwitch button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
+  syncUI();
+}
+
+function syncUI() {
+  const isSand = game.level === 4;
+  document.querySelectorAll('#levelTabs button').forEach(b => b.classList.toggle('active', Number(b.dataset.level) === game.level));
+  document.getElementById('stationsBar').hidden = isSand;
+  document.getElementById('sandboxTools').hidden = !isSand;
+  document.getElementById('mProgWrap').hidden = isSand;
+
+  document.getElementById('mTitle').textContent = tr(`l${game.level}Title`);
+  document.getElementById('mDesc').textContent = tr(`l${game.level}Desc`);
+  const badgeColors = ['#3be8a4', '#2fb8ff', '#ff6a2b', '#ffd028', '#a6b8d0'];
+  document.getElementById('mBadge').style.color = badgeColors[game.level];
+
+  document.querySelectorAll('.station-btn').forEach((btn, i) => {
+    btn.classList.toggle('on', STATIONS[i].active || STATIONS[i].hold);
+  });
+}
+
+function updateTelemetryHUD() {
+  const { dT, flowCm, deepO2 } = game.metrics;
+  document.getElementById('valDT').textContent = `${dT.toFixed(1)} °C`;
+  document.getElementById('valFlow').textContent = `${Math.round(flowCm)} cm/s`;
+  document.getElementById('valO2').textContent = `${Math.round(deepO2)}%`;
+
+  if (game.level === 0) {
+    const rf = game.reefs[0];
+    document.getElementById('mProgFill').style.width = `${Math.min(100, (rf.fed / rf.goal) * 100)}%`;
+    document.getElementById('mProgText').textContent = `${rf.fed} / ${rf.goal} O₂`;
+  } else if (game.level === 1) {
+    const fed = game.reefs[0].fed + game.reefs[1].fed;
+    const goal = game.reefs[0].goal + game.reefs[1].goal;
+    document.getElementById('mProgFill').style.width = `${Math.min(100, (fed / goal) * 100)}%`;
+    document.getElementById('mProgText').textContent = `${fed} / ${goal} O₂`;
+  } else if (game.level === 2) {
+    const pct = Math.min(100, (game.surviveTimer / game.surviveGoal) * 100);
+    document.getElementById('mProgFill').style.width = `${pct}%`;
+    document.getElementById('mProgText').textContent = `${Math.floor(game.surviveTimer)}s / ${game.surviveGoal}s`;
+  } else if (game.level === 3) {
+    const hits = game.gates.filter(g => g.hit).length;
+    document.getElementById('mProgFill').style.width = `${(hits / game.gates.length) * 100}%`;
+    document.getElementById('mProgText').textContent = `${hits} / ${game.gates.length}`;
+  }
+}
+
+// Mouse / Touch on Ocean Tank
+function updatePointer(e) {
+  const r = tankCanvas.getBoundingClientRect();
+  pointer.px = pointer.nx; pointer.py = pointer.ny;
+  pointer.nx = Math.max(0.02, Math.min(0.98, (e.clientX - r.left) / Math.max(1, r.width)));
+  pointer.ny = Math.max(0.03, Math.min(0.97, (e.clientY - r.top) / Math.max(1, r.height)));
+}
+tankCanvas.addEventListener('pointerdown', e => {
+  tankCanvas.setPointerCapture(e.pointerId);
+  updatePointer(e);
+  // Check if user clicked directly on one of the 4 corner thermal stations!
+  if (game.level !== 4) {
+    for (const s of STATIONS) {
+      if (Math.hypot((pointer.nx - s.nx) * 1.4, pointer.ny - s.ny) < 0.085) {
+        s.active = !s.active;
+        SFX.toggleSt(s.kind === 'vent');
+        syncUI();
+        return;
+      }
+    }
+  }
+  pointer.down = true;
+});
+tankCanvas.addEventListener('pointermove', e => { if (pointer.down) updatePointer(e); });
+for (const ev of ['pointerup', 'pointercancel']) tankCanvas.addEventListener(ev, () => { pointer.down = false; });
+
+// Station buttons (click to toggle in normal mode!)
+document.querySelectorAll('.station-btn').forEach(btn => {
+  btn.onclick = () => {
+    const i = Number(btn.dataset.st);
+    STATIONS[i].active = !STATIONS[i].active;
+    SFX.toggleSt(STATIONS[i].kind === 'vent');
+    syncUI();
+  };
+});
+
+// Keyboard 1-4 (works in BOTH standard mode and 4-sided Pyramid mode!)
+window.addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const idx = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
+  if (idx >= 0) {
+    if (game.pyramid) {
+      STATIONS[idx].hold = true;
+    } else {
+      STATIONS[idx].active = !STATIONS[idx].active;
+    }
+    SFX.toggleSt(STATIONS[idx].kind === 'vent');
+    syncUI();
+  } else if (e.code === 'KeyR') {
+    setupLevel(game.level);
+  } else if (e.code === 'Escape' && game.pyramid) {
+    togglePyramid(false);
+  }
+});
+window.addEventListener('keyup', e => {
+  const idx = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
+  if (idx >= 0 && game.pyramid) STATIONS[idx].hold = false;
+});
+
+// USB / Bluetooth Gamepad Polling (matches Holo Stage physical arcade buttons!)
+function pollGamepads() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  for (const p of pads) {
+    if (!p) continue;
+    for (let i = 0; i < 4; i++) {
+      const b = p.buttons[i];
+      if (!b) continue;
+      STATIONS[i].hold = !!(b.pressed || b.value > 0.5);
+    }
+  }
+}
+
+// Level tabs, Sandbox tools, Toggles & Pyramid mode
+document.querySelectorAll('#levelTabs button').forEach(btn => {
+  btn.onclick = () => setupLevel(Number(btn.dataset.level));
+});
+document.querySelectorAll('#sandboxTools [data-tool]').forEach(btn => {
+  btn.onclick = () => {
+    game.tool = btn.dataset.tool;
+    document.querySelectorAll('#sandboxTools [data-tool]').forEach(b => {
+      b.classList.remove('active', 'cold-active', 'o2-active');
+    });
+    btn.classList.add(game.tool === 'cold' ? 'cold-active' : game.tool === 'o2' ? 'o2-active' : 'active');
+  };
+});
+document.getElementById('btnPresetConv').onclick = () => {
+  setupLevel(4);
+  STATIONS[0].active = true; STATIONS[1].active = true;
+  syncUI();
+};
+document.getElementById('btnPresetStall').onclick = () => {
+  setupLevel(4);
+  STATIONS.forEach(s => { s.active = false; });
+  for (let i = 0; i < SIZE; i++) if (!fluid.solid[i]) fluid.T[i] = 0.85;
+  syncUI();
+};
+document.getElementById('btnVectors').onclick = e => {
+  game.showArrows = !game.showArrows;
+  e.currentTarget.classList.toggle('active', game.showArrows);
+};
+document.getElementById('btnThermal').onclick = e => {
+  game.showThermal = !game.showThermal;
+  e.currentTarget.classList.toggle('active', game.showThermal);
+};
+document.getElementById('btnReset').onclick = () => setupLevel(game.level);
+document.getElementById('modalRetry').onclick = () => setupLevel(game.level);
+document.getElementById('modalNext').onclick = () => setupLevel(Math.min(4, game.level + 1));
+document.getElementById('btnSound').onclick = e => {
+  e.currentTarget.textContent = SFX.toggle() ? '🔊' : '🔇';
+};
+document.querySelectorAll('#langSwitch button').forEach(b => {
+  b.onclick = () => { lang = b.dataset.lang; applyLang(); };
+});
+
+function togglePyramid(force) {
+  game.pyramid = force === undefined ? !game.pyramid : !!force;
+  document.body.classList.toggle('pyramid-mode', game.pyramid);
+  if (game.pyramid) {
+    if (!pyrTiles.length) initPyramidTiles();
+    layoutPyramid();
+  }
+}
+document.getElementById('btnPyramid').onclick = () => togglePyramid(true);
+document.getElementById('btnExitPyr').onclick = () => togglePyramid(false);
+document.getElementById('btnPyrNextLvl').onclick = () => setupLevel((game.level + 1) % 4);
+document.getElementById('btnPyrFull').onclick = () => {
+  document.documentElement.requestFullscreen?.().catch(() => {});
+};
+
+function resizeTank() {
+  const r = tankCanvas.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.floor(r.width * dpr));
+  const h = Math.max(1, Math.floor(r.height * dpr));
+  if (tankCanvas.width !== w || tankCanvas.height !== h) {
+    tankCanvas.width = w; tankCanvas.height = h;
+  }
+  layoutPyramid();
+}
+window.addEventListener('resize', resizeTank);
+
+/* ============================================================================
+ * 9. Main 60 FPS Loop
+ * ========================================================================== */
+let lastTs = performance.now();
+function frame(ts) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.033, Math.max(0.004, (ts - lastTs) / 1000));
+  lastTs = ts;
+
+  pollGamepads();
+  stepSimulation(dt);
+
+  if (game.pyramid) {
+    renderPyramidFrames();
+  } else {
+    resizeTank();
+    renderOceanTo(tankCtx, tankCanvas.width, tankCanvas.height, false);
+    updateTelemetryHUD();
+  }
+}
+
+// Expose test hook for automated visual QA
+window.__OCEAN_DEBUG__ = { game, fluid, STATIONS, setupLevel, stepSimulation, togglePyramid };
+
+applyLang();
+setupLevel(0);
+if (new URLSearchParams(location.search).get('pyramid') === '1') togglePyramid(true);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
