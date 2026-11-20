@@ -259,7 +259,7 @@ const locPh = (obj, k, defaultKey, vars = {}) => {
 };
 
 function sceneTitle(sc) {
-  const key = { chapter: 'caption', together: 'prompt', quiz: 'question', turns: 'prompt' }[sc.type];
+  const key = { chapter: 'caption', together: 'prompt', quiz: 'question', turns: 'prompt', currents: 'prompt' }[sc.type];
   const text = getLoc(sc, key, state.lang, { fallback: true });
   return (text || '').trim().split('\n')[0] || clipName(sc.clip) || t(SCENE_TYPES[sc.type].labelKey);
 }
@@ -316,6 +316,15 @@ function sceneFields(sc) {
       ${sc.decide === 'timer' ? field(t('behindQuestionLoop'), clipSelect('clip', sc.clip, t('keepPicture'))) : ''}
       ${field(t('explainLabel'), textArea('explain', locVal(sc, 'explain'), locPh(sc, 'explain', 'explainPlaceholder')))}
       <p class="hint">${esc(t('quizHint'))}</p>`;
+  }
+  if (sc.type === 'currents') {
+    const lvls = [0, 1, 2, 3].map(n => `<option value="${n}"${Number(sc.level) === n ? ' selected' : ''}>${esc(t(`currentsLvl${n}`))}</option>`).join('');
+    return `${field(t('playersRead'), textArea('prompt', locVal(sc, 'prompt'), locPh(sc, 'prompt', 'currentsPlaceholder')))}
+      <div class="grid">
+        ${field(t('currentsLevelLabel'), `<select data-k="level">${lvls}</select>`)}
+        ${field(t('whenMadeItPlay'), clipSelect('successClip', sc.successClip, t('nothingGoOn')))}
+      </div>
+      <p class="hint">${esc(t('currentsHint'))}</p>`;
   }
   const turnClips = sc.clips.map((id, n) => `<li><span class="tag">${esc(t('turnTag', { n: n + 1 }))}</span><span class="name">${esc(clipName(id) || t('missingClip'))}</span>
       <button class="icon" data-act="upTurn" data-a="${n}" title="${esc(t('moveUp'))}" aria-label="${esc(t('moveTurnUp', { n: n + 1 }))}"${n === 0 ? ' disabled' : ''}>${icon('i-up')}</button>
@@ -422,7 +431,7 @@ $('#addScene').onclick = e => {
   const sc = newScene(type);
   const at = openScene >= 0 ? openScene + 1 : list.length;
   // start from the clip of the scene before, so the picture doesn't change by accident
-  if (type !== 'chapter') sc.clip = list[at - 1]?.clip || state.story.attractClip || '';
+  if (type !== 'chapter' && type !== 'currents') sc.clip = list[at - 1]?.clip || state.story.attractClip || '';
   list.splice(at, 0, sc);
   openScene = at;
   storyChanged();
@@ -479,7 +488,7 @@ scenesEl.addEventListener('input', e => {
   if (!k) return;
   const target = el.dataset.a != null ? sc.answers[Number(el.dataset.a)] : sc;
   if (LOC_KEYS.has(k)) setLoc(target, k, el.value, state.lang);
-  else target[k] = el.type === 'number' || k === 'correct' ? Number(el.value) || 0 : el.value;
+  else target[k] = el.type === 'number' || k === 'correct' || k === 'level' ? Number(el.value) || 0 : el.value;
   save();
   li.querySelector('.scene-title').textContent = sceneTitle(sc);
 });

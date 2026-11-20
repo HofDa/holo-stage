@@ -1,6 +1,6 @@
 // App-shell cache so the stage works offline. Videos live in IndexedDB, not here.
-const CACHE = 'holo-stage-v17';
-const SHELL = ['./', 'index.html', 'style.css', 'i18n.js', 'app.js', 'story.js', 'ui.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
+const CACHE = 'holo-stage-v18';
+const SHELL = ['./', 'index.html', 'style.css', 'i18n.js', 'app.js', 'currents.js', 'story.js', 'ui.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'ocean_currents/index.html'];
 
 self.addEventListener('install', e => {
   // cache: 'reload' bypasses the browser's HTTP cache so a new version is really fetched

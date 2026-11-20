@@ -11,6 +11,7 @@ const SCENE_TYPES = {
   together: { labelKey: 'sceneTogether', label: 'All together', icon: 'i-together' },
   quiz: { labelKey: 'sceneQuiz', label: 'Quiz', icon: 'i-quiz' },
   turns: { labelKey: 'sceneTurns', label: 'Take turns', icon: 'i-turns' },
+  currents: { labelKey: 'sceneCurrents', label: 'Ocean currents', icon: 'i-wave' },
 };
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -48,6 +49,19 @@ function newScene(type) {
         it: { prompt: 'A turno!' },
       },
       clip: '', clips: [],
+    };
+  }
+  if (type === 'currents') {
+    return {
+      ...base,
+      level: 0,
+      prompt: 'Drive the ocean current!',
+      i18n: {
+        en: { prompt: 'Drive the ocean current!' },
+        de: { prompt: 'Treibt die Meeresströmung an!' },
+        it: { prompt: 'Attivate la corrente marina!' },
+      },
+      successClip: '',
     };
   }
   return { ...base, type: 'chapter', clip: '', seconds: 0, caption: '' };
@@ -256,6 +270,11 @@ class Player {
       this.inner.appendChild(v);
       return v;
     });
+    this.mg = document.createElement('canvas');
+    this.mg.className = 'minigame';
+    this.mg.width = 420; this.mg.height = 420;
+    this.mg.hidden = true;
+    this.mgCtx = this.mg.getContext('2d');
     this.label = document.createElement('div');
     this.label.className = 'label';
     this.hud = document.createElement('div');   // story prompts, drawn mirrored like the clip
@@ -263,7 +282,7 @@ class Player {
     this.pauseBadge = document.createElement('div');
     this.pauseBadge.className = 'pause-badge';
     this.pauseBadge.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#i-pause"/></svg><span></span>';
-    this.inner.append(this.label, this.hud, this.pauseBadge);
+    this.inner.append(this.mg, this.label, this.hud, this.pauseBadge);
     this.guide = document.createElement('div');
     this.guide.className = 'guide';
     this.el.append(this.inner, this.guide);
@@ -304,6 +323,10 @@ class Player {
     const list = this.list();
     if (!list.length) return this.blank();
     this.show(list[0], true);
+  }
+  setMinigame(on) {
+    this.mg.hidden = !on;
+    if (!on) this.mgCtx.clearRect(0, 0, this.mg.width, this.mg.height);
   }
   blank() {
     this.token++;

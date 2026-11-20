@@ -30,6 +30,7 @@
       <symbol id="i-together" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.500"/><circle cx="12" cy="3.800" r="1.300"/><circle cx="20.200" cy="12" r="1.300"/><circle cx="12" cy="20.200" r="1.300"/><circle cx="3.800" cy="12" r="1.300"/></symbol>
       <symbol id="i-quiz" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M9.700 9.600a2.400 2.400 0 1 1 3.500 2.100c-.8.400-1.200 1-1.200 1.800M12 16.400v.1"/></symbol>
       <symbol id="i-turns" viewBox="0 0 24 24"><path d="M16.500 3.500l3 3-3 3M4.500 11V8.500a2 2 0 0 1 2-2h13M7.500 20.500l-3-3 3-3M19.500 13v2.500a2 2 0 0 1-2 2h-13"/></symbol>
+      <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 9c2.2-2.2 4.3-2.2 6.5 0s4.3 2.2 6.5 0 4-2.2 5 0M3 15c2.2-2.2 4.3-2.2 6.5 0s4.3 2.2 6.5 0 4-2.2 5 0"/></symbol>
       <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
       <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4l10.5-10.5a2 2 0 0 0-4-4L4 16v4z"/></symbol>
     </defs>
@@ -151,6 +152,18 @@
       <h2 data-i18n="includedClips">Included clips</h2>
       <p class="hint" data-i18n="includedClipsHint">Ready-made hologram clips bundled with this app. Preview or add individual clips, or load a full pack into your library.</p>
       <div id="builtinPacks" class="builtin-packs"></div>
+
+      <h2 data-i18n="minigamesHeading">Interactive minigame</h2>
+      <div class="builtin-pack">
+        <div class="row spread builtin-pack-head">
+          <strong data-i18n="currentsGameTitle">Ocean Currents (Thermal Convection)</strong>
+        </div>
+        <p class="hint" data-i18n="currentsGameHint">Play directly on this screen or in 4-sided pyramid mode, or add an Ocean currents scene to any story.</p>
+        <div class="row">
+          <a class="button primary" href="ocean_currents/index.html" target="_blank" rel="noopener" data-i18n="openCurrentsScreen">Play on screen ↗</a>
+          <a class="button" href="ocean_currents/index.html?pyramid=1" target="_blank" rel="noopener" data-i18n="openCurrentsPyramid">4-side pyramid ↗</a>
+        </div>
+      </div>
     </section>
 
     <!-- ------------------------------------------------------------ Pyramid -->
@@ -313,6 +326,7 @@
 
   <script src="i18n.js"></script>
   <script src="app.js"></script>
+  <script src="currents.js"></script>
   <script src="story.js"></script>
   <script src="ui.js"></script>
 </body>

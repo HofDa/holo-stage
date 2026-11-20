@@ -57,6 +57,18 @@ body.idle-cursor { cursor: none; }
   filter: contrast(1.04) brightness(0.98); /* push near-black to pure black */
 }
 .tile video.on { opacity: 1; }
+.tile canvas.minigame {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; z-index: 1; pointer-events: none;
+}
+.tile canvas.minigame[hidden] { display: none; }
+#stage.paused .tile canvas.minigame { opacity: .22; }
+.hud-mg-role {
+  font-size: 5.8cqmin; padding: 1.2cqmin 3cqmin; border-radius: 99px;
+  background: rgba(0, 0, 0, .55); border: .6cqmin solid var(--c); color: var(--c);
+  transition: background 140ms, color 140ms, box-shadow 140ms;
+}
+.hud-mg-role.on { background: var(--c); color: #05070c; box-shadow: 0 0 3.5cqmin var(--c); }
 .tile .label {
   position: absolute; left: 6%; right: 6%; z-index: 2; pointer-events: none;
   text-align: center; white-space: pre-line; overflow-wrap: anywhere;

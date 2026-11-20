@@ -54,6 +54,7 @@ const Story = {
     this.t = 0; this.s = {}; this.token++;
     this.lastInput = this.sceneStart = this.now;
     this.meter(0);
+    players.forEach(p => p.setMinigame(false));
     stage.classList.remove('rumble', 'cine');
     stage.classList.toggle('story', phase !== 'off');
     stage.dataset.scene = phase === 'scene' ? this.scene.type : phase;
@@ -417,6 +418,72 @@ const HANDLERS = {
       return `<div class="hud-top">${hudText('hud-prompt', S.loc(sc, 'prompt', i))}<div class="steps">${steps}</div></div>
         <div class="hud-bottom">${hudText(`hud-turn ${i === s.cur ? 'mine' : ''}`, who, `--c:${esc(cur.color)}`)}
         ${S.team(i, st)}</div>`;
+    },
+  },
+
+  /* Ocean currents minigame: players control 4 thermal stations (heat vents & polar ice)
+   * to drive real thermal convection currents and oxygenate deep-sea life. */
+  currents: {
+    enter(sc, S) {
+      S.cur = null; S.curLoop = false;
+      players.forEach(p => { p.blank(); p.setMinigame(true); });
+      CurrentsGame.init(sc.level || 0, state.players);
+      S.s.latched = [false, false, false, false];
+      S.s.pressAt = [0, 0, 0, 0];
+      S.s.wasDown = [false, false, false, false];
+      S.s.done = false;
+      S.s.until = 0;
+      S.s.dT = 0;
+      CurrentsGame.renderToTiles(players, [false, false, false, false]);
+    },
+    press(sc, S, i) {
+      if (S.s.done) return;
+      S.s.latched[i] = !S.s.latched[i];
+      S.s.pressAt[i] = S.now;
+      S.s.wasDown[i] = true;
+      SFX.play('press');
+    },
+    tick(sc, S, dt) {
+      const s = S.s;
+      if (s.done) { if (s.until && S.t >= s.until) S.advance(); return; }
+      // Hybrid control: short tap toggles station on/off; holding >=350ms turns off on release
+      const active = [0, 1, 2, 3].map(i => {
+        if (s.wasDown[i] && !S.down[i]) {
+          s.wasDown[i] = false;
+          if (S.now - s.pressAt[i] >= 350) s.latched[i] = false;
+        }
+        return S.down[i] || s.latched[i];
+      });
+      const g = CurrentsGame.step(dt / 1000, active);
+      s.dT = g.dT;
+      s.active = active;
+      S.meter(g.progress);
+      CurrentsGame.renderToTiles(players, active);
+      if (!g.won) return;
+      s.done = s.busy = true;
+      stage.classList.add('cine');
+      S.flash();
+      SFX.play('together');
+      if (clips.has(sc.successClip)) {
+        players.forEach(p => p.setMinigame(false));
+        S.playOnce(sc.successClip, () => S.advance());
+      } else {
+        s.until = S.t + 2200;
+      }
+    },
+    hud(sc, S, i) {
+      const s = S.s;
+      const pLang = S.langFor(i);
+      if (s.done) {
+        if (clips.has(sc.successClip)) return '';
+        return `<div class="hud-top"></div><div class="hud-mid">${hudText('hud-verdict good', S.textFor(i).right)}</div><div class="hud-bottom"></div>`;
+      }
+      const roleKey = `currentsRole${i}`;
+      const on = !!(s.active && s.active[i]);
+      const role = t(roleKey, {}, pLang);
+      const dtStr = `ΔT ${(s.dT || 0).toFixed(0)}°C`;
+      return `<div class="hud-top">${hudText('hud-prompt', S.loc(sc, 'prompt', i))}<div class="bar agree"><i></i></div></div>
+        <div class="hud-bottom"><p class="hud-mg-role${on ? ' on' : ''}" style="--c:${esc(state.players[i].color)}">${esc(role)} · ${esc(dtStr)}</p></div>`;
     },
   },
 };
