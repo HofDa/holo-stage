@@ -412,6 +412,17 @@ body.story-mode .player details.more { display: none; }
 .library li .name, .library li input.rename { flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .library li input.rename { min-height: 30px; padding: 3px 8px; }
 .library li .dur, .library li .size { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.builtin-packs { display: grid; gap: 12px; margin-top: 10px; }
+.builtin-pack { padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--well); }
+.builtin-pack-head { margin-bottom: 8px; }
+.builtin-pack-head strong { font-size: 13.5px; color: var(--panel-fg); }
+.builtin-pack .builtin-3d { text-decoration: none; min-height: 30px; padding: 4px 9px; font-size: 12px; color: var(--muted); }
+.builtin-pack .builtin-3d:hover { color: var(--panel-fg); }
+.builtin-pack .builtin-all { min-height: 30px; padding: 4px 10px; font-size: 12.5px; }
+.builtin-list { margin: 0; }
+.builtin-list li { background: var(--panel-bg); padding: 5px 7px; }
+.builtin-list button[data-add] { min-height: 30px; padding: 4px 10px; font-size: 12.5px; }
+.builtin-list button.is-added { color: var(--good); border-color: #24683b; opacity: .75; }
 .panel.dragover { outline: 3px dashed var(--accent); outline-offset: -6px; }
 
 .notice {

@@ -739,7 +739,7 @@ function linkPendingClips() {
 
 function renderLibrary() {
   const ul = $('#library');
-  if (previewClipId && !clips.has(previewClipId)) closePreview();
+  if (previewClipId && !previewClipId.startsWith('builtin:') && !clips.has(previewClipId)) closePreview();
   ul.innerHTML = clips.size ? '' : `<li class="hint">${esc(t('noVideosYet'))}</li>`;
   for (const c of clips.values()) {
     const dur = durations.has(c.id) ? fmtDur(durations.get(c.id)) : '';
@@ -774,7 +774,77 @@ function renderLibrary() {
   if (navigator.storage?.estimate) navigator.storage.estimate().then(({ usage, quota }) => {
     $('#storage').textContent = t('storageUsed', { used: fmtSize(usage), quota: fmtSize(quota) });
   });
+  renderBuiltinPacks();
   syncDemoButtons();
+}
+
+async function importBuiltinItems(items, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = t('loading'); }
+  let added = 0;
+  try {
+    for (const item of items) {
+      if ([...clips.values()].some(c => c.name === item.name)) continue;
+      const r = await fetch(item.url);
+      if (!r.ok) throw new Error(`${item.url}: ${r.status}`);
+      await addClip(await r.blob(), item.name);
+      added++;
+    }
+    const linked = linkPendingClips();
+    if (linked) { applyAll(); notice(t('noticeLinked', { n: linked }), { tone: 'good', ms: 3500 }); }
+    else if (added) {
+      clipsChanged();
+      notice(added === 1 ? t('noticeClipAdded', { name: items[0].name }) : t('noticePackAdded', { n: added }), { tone: 'good', ms: 3000 });
+    } else {
+      renderBuiltinPacks();
+    }
+  } catch (e) {
+    notice(t('noticeClipLoadErr', { msg: e.message }), { tone: 'err' });
+    renderBuiltinPacks();
+  }
+}
+
+function isOfflineRemote() {
+  return !navigator.onLine && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+}
+
+function renderBuiltinPacks() {
+  const host = $('#builtinPacks');
+  if (!host || typeof BUILTIN_PACKS === 'undefined') return;
+  host.innerHTML = '';
+  const offline = isOfflineRemote();
+  for (const pack of BUILTIN_PACKS) {
+    const card = document.createElement('div');
+    card.className = 'builtin-pack';
+    const allIn = pack.clips.every(item => [...clips.values()].some(c => c.name === item.name));
+    const head = document.createElement('div');
+    head.className = 'row spread builtin-pack-head';
+    const viewerLink = pack.viewerUrl
+      ? `<a class="button builtin-3d" href="${esc(pack.viewerUrl)}" target="_blank" rel="noopener" title="${esc(t('open3DViewer'))}">3D ↗</a>`
+      : '';
+    head.innerHTML = `<strong>${esc(t(pack.titleKey))}</strong>
+      <div class="row">${viewerLink}<button class="builtin-all" ${allIn || offline ? 'disabled' : ''}>${esc(allIn ? t('added') : t('addAll'))}</button></div>`;
+    const allBtn = head.querySelector('.builtin-all');
+    if (offline && !allIn) allBtn.title = t('offlineDemoTitle');
+    allBtn.onclick = () => importBuiltinItems(pack.clips, allBtn);
+    card.appendChild(head);
+
+    const ul = document.createElement('ul');
+    ul.className = 'library builtin-list';
+    for (const item of pack.clips) {
+      const has = [...clips.values()].some(c => c.name === item.name);
+      const li = document.createElement('li');
+      li.innerHTML = `<button class="icon" data-prev title="${esc(t('previewClip'))}" aria-label="${esc(t('previewClipAria', { name: item.name }))}">${icon('i-play')}</button>
+        <span class="name" title="${esc(item.name)}">${esc(item.name)}</span>
+        <button data-add ${has || offline ? 'disabled' : ''} class="${has ? 'is-added' : ''}">${esc(has ? t('added') : t('addToLibrary'))}</button>`;
+      li.querySelector('[data-prev]').onclick = () => openPreview({ id: `builtin:${item.url}`, name: item.name, url: item.url });
+      const addBtn = li.querySelector('[data-add]');
+      if (offline && !has) addBtn.title = t('offlineDemoTitle');
+      addBtn.onclick = () => importBuiltinItems([item], addBtn);
+      ul.appendChild(li);
+    }
+    card.appendChild(ul);
+    host.appendChild(card);
+  }
 }
 // New clips change every clip menu, so redraw the editors without touching what plays.
 function clipsChanged() {
@@ -886,14 +956,14 @@ async function loadDemo(btn) {
 }
 function syncDemoButtons() {
   const demoCached = DEMO.every(d => [...clips.values()].some(c => c.name === d.name));
-  const offlineBlocked = !navigator.onLine && !demoCached;
+  const offlineBlocked = isOfflineRemote() && !demoCached;
   document.querySelectorAll('[data-demo]').forEach(btn => {
     btn.disabled = offlineBlocked;
     btn.title = offlineBlocked ? t('offlineDemoTitle') : '';
   });
 }
-addEventListener('online', syncDemoButtons);
-addEventListener('offline', syncDemoButtons);
+addEventListener('online', () => { syncDemoButtons(); renderBuiltinPacks(); });
+addEventListener('offline', () => { syncDemoButtons(); renderBuiltinPacks(); });
 document.querySelectorAll('[data-demo]').forEach(btn => { btn.onclick = () => loadDemo(btn); });
 
 /* ---------------------------------------------------------------- pyramid layout + backup */

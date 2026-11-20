@@ -78,6 +78,40 @@ const DEMO = [
   { url: 'demo/volcano_idle_turning.mp4', name: 'Volcano – idle, turning (loop)' },
   { url: 'demo/volcano_eruption_turning.mp4', name: 'Volcano – eruption, turning' },
 ];
+const BUILTIN_PACKS = [
+  {
+    id: 'morganucodon',
+    titleKey: 'packMorganucodon',
+    viewerUrl: 'morganucodon/index.html',
+    clips: [
+      { url: 'morganucodon/morganucodon_idle_turning.mp4', name: 'Morganucodon – idle, turning (loop)' },
+      { url: 'morganucodon/morganucodon_jump_turning.mp4', name: 'Morganucodon – jump, turning' },
+      { url: 'morganucodon/morganucodon_idle.mp4', name: 'Morganucodon – idle (loop)' },
+      { url: 'morganucodon/morganucodon_jump.mp4', name: 'Morganucodon – jump' },
+    ],
+  },
+  {
+    id: 'permian',
+    titleKey: 'packPermian',
+    viewerUrl: 'permian_extinction/index.html',
+    clips: [
+      { url: 'permian_extinction/pt_permian_idle_turning.mp4', name: 'Permian–Triassic – Permian Earth, turning (loop)' },
+      { url: 'permian_extinction/pt_extinction_turning.mp4', name: 'Permian–Triassic – eruption & warming, turning' },
+      { url: 'permian_extinction/pt_extinction_full.mp4', name: 'Permian–Triassic – eruption & warming (full)' },
+      { url: 'permian_extinction/pt_aftermath_idle_turning.mp4', name: 'Permian–Triassic – greenhouse aftermath, turning (loop)' },
+    ],
+  },
+  {
+    id: 'volcano',
+    titleKey: 'packVolcano',
+    clips: [
+      { url: 'demo/volcano_idle_turning.mp4', name: 'Volcano – idle, turning (loop)' },
+      { url: 'demo/volcano_eruption_turning.mp4', name: 'Volcano – eruption, turning' },
+      { url: 'demo/volcano_idle.mp4', name: 'Volcano – idle (loop)' },
+      { url: 'demo/volcano_eruption.mp4', name: 'Volcano – eruption' },
+    ],
+  },
+];
 const durations = new Map();          // clip id -> seconds (known once a clip has loaded)
 const PRESS_DEBOUNCE_MS = 150;
 

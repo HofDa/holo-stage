@@ -1,5 +1,5 @@
 // App-shell cache so the stage works offline. Videos live in IndexedDB, not here.
-const CACHE = 'holo-stage-v16';
+const CACHE = 'holo-stage-v17';
 const SHELL = ['./', 'index.html', 'style.css', 'i18n.js', 'app.js', 'story.js', 'ui.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -20,7 +20,8 @@ self.addEventListener('activate', e => {
 // Network first for the shell (so updates arrive), cache as offline fallback.
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.includes('/demo/')) return;
+  if (e.request.method !== 'GET' || url.origin !== location.origin
+    || /\.(mp4|glb)$/i.test(url.pathname) || url.pathname.includes('/demo/')) return;
   e.respondWith(
     fetch(e.request, { cache: 'no-cache' })   // always revalidate with the server
       .then(r => {
