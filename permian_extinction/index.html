@@ -1,0 +1,1601 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Permian–Triassic Boundary (~252 Ma) — Volcanic Greenhouse & Mass Extinction</title>
+<style>
+  :root {
+    --panel: rgba(12, 14, 18, 0.80);
+    --border: rgba(255, 255, 255, 0.12);
+    --text: #eef1f6;
+    --muted: #98a2b3;
+    --accent: #f08a3c;
+    --accent-hi: #ffb36b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #000; color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    user-select: none; -webkit-user-select: none;
+  }
+  #glcanvas {
+    display: block; width: 100%; height: 100%;
+    cursor: grab; touch-action: none;
+  }
+  #glcanvas:active { cursor: grabbing; }
+
+  .hud {
+    position: fixed; inset: 0; pointer-events: none;
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: 16px 18px;
+    transition: opacity 200ms ease;
+  }
+  body.hud-hidden .hud { opacity: 0; pointer-events: none; }
+
+  .top-row {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  }
+  .card {
+    pointer-events: auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-radius: 14px;
+    padding: 12px 15px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.48);
+  }
+  .title-card h1 { font-size: 17px; font-weight: 600; letter-spacing: 0.01em; }
+  .title-card h1 span { color: var(--accent-hi); font-weight: 500; }
+  .title-card p { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.4; max-width: 440px; }
+
+  .phase-badge {
+    margin-top: 8px;
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 600;
+    padding: 4px 10px; border-radius: 999px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+  .phase-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #38d996; box-shadow: 0 0 8px currentColor;
+  }
+
+  .legend {
+    display: flex; flex-direction: column; gap: 6px;
+    font-size: 12px; color: var(--muted);
+  }
+  .legend-row { display: flex; align-items: center; gap: 8px; }
+  .swatch {
+    width: 18px; height: 4px; border-radius: 2px; flex-shrink: 0;
+  }
+
+  .controls-bar {
+    pointer-events: auto;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+    max-width: 1120px; margin: 0 auto; width: 100%;
+  }
+
+  button, select {
+    appearance: none;
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 7px 11px;
+    font-size: 12.5px; font-weight: 500;
+    cursor: pointer;
+    transition: background 140ms, border-color 140ms, transform 90ms;
+  }
+  button:hover, select:hover { background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.24); }
+  button:active { transform: scale(0.97); }
+  button.primary {
+    background: linear-gradient(180deg, #f39a4b, #cf6722);
+    border-color: rgba(255, 210, 165, 0.4);
+    color: #1a0b03; font-weight: 700;
+    padding: 7px 15px;
+  }
+  button.active {
+    background: rgba(240, 138, 60, 0.22);
+    border-color: var(--accent);
+    color: var(--accent-hi);
+  }
+  select option { background: #14171d; color: #eef1f6; }
+
+  .phase-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .scrubber {
+    flex: 1 1 200px; display: flex; align-items: center; gap: 8px; min-width: 160px;
+  }
+  .scrubber input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; }
+  .scrubber span { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+
+  .hint-pill {
+    font-size: 11px; color: var(--muted);
+    display: flex; gap: 10px; flex-wrap: wrap;
+    margin-top: 4px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.07);
+    width: 100%; justify-content: space-between;
+  }
+  .hint-pill kbd {
+    background: rgba(255,255,255,0.1); border-radius: 4px;
+    padding: 1px 5px; font-family: inherit; font-size: 10px; color: var(--text);
+  }
+</style>
+</head>
+<body>
+<canvas id="glcanvas"></canvas>
+
+<div class="hud" id="hud">
+  <div class="top-row">
+    <div class="card title-card">
+      <h1>Permian–Triassic Extinction <span>· 252 Ma</span></h1>
+      <p>Siberian Traps volcanism → ash dimming → CO₂ greenhouse heat trapping → runaway global warming.</p>
+      <div class="phase-badge">
+        <i class="phase-dot" id="phaseDot"></i>
+        <span id="phaseName">1 · Late Permian Equilibrium</span>
+      </div>
+    </div>
+
+    <div class="card legend">
+      <div class="legend-row"><span class="swatch" style="background:linear-gradient(90deg,#ffd54a,#fff6c2)"></span>Incoming Solar Rays</div>
+      <div class="legend-row"><span class="swatch" style="background:linear-gradient(90deg,#ff4422,#ff9944)"></span>Infrared Heat Waves (Escaping → Trapped)</div>
+      <div class="legend-row"><span class="swatch" style="background:linear-gradient(90deg,#55524f,#a49a90)"></span>Volcanic Ash &amp; Sulfate Dimming</div>
+      <div class="legend-row"><span class="swatch" style="background:linear-gradient(90deg,#d97324,#ff3d1f)"></span>CO₂ Greenhouse Blanket</div>
+    </div>
+  </div>
+
+  <div class="card controls-bar">
+    <button id="btnPlay" class="primary">Pause</button>
+    <button id="btnRestart">Restart</button>
+
+    <div class="phase-btns">
+      <button data-phase="0.06" class="active">1 · Permian</button>
+      <button data-phase="0.33">2 · Ash Dimming</button>
+      <button data-phase="0.62">3 · Heat Trap</button>
+      <button data-phase="0.90">4 · Extinction</button>
+    </div>
+
+    <button id="btnTurn" title="Match 72°/s Holo Stage turntable speed">72°/s Spin</button>
+
+    <select id="selBg" title="Backdrop style">
+      <option value="holo" selected>Hologram · Pure Black</option>
+      <option value="museum">Museum · Deep Starfield</option>
+    </select>
+
+    <div class="scrubber">
+      <input id="rngTime" type="range" min="0" max="1" step="0.002" value="0">
+      <span id="lblTime">0.0s</span>
+    </div>
+
+    <div class="hint-pill">
+      <span>Drag to orbit · Scroll to zoom · <kbd>Space</kbd> Play/Pause · <kbd>1–4</kbd> Jump to phase · <kbd>H</kbd> Hide UI</span>
+      <span>Language-neutral thermometer on left · 3D Pangaea Globe</span>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ============================================================================
+ * Minimal Matrix Math (Column-Major Float32Array)
+ * ========================================================================== */
+const M4 = {
+  ident: () => new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]),
+  mul(a, b) {
+    const o = new Float32Array(16);
+    for (let c = 0; c < 4; c++) {
+      const b0 = b[c*4], b1 = b[c*4+1], b2 = b[c*4+2], b3 = b[c*4+3];
+      o[c*4+0] = a[0]*b0 + a[4]*b1 + a[8]*b2  + a[12]*b3;
+      o[c*4+1] = a[1]*b0 + a[5]*b1 + a[9]*b2  + a[13]*b3;
+      o[c*4+2] = a[2]*b0 + a[6]*b1 + a[10]*b2 + a[14]*b3;
+      o[c*4+3] = a[3]*b0 + a[7]*b1 + a[11]*b2 + a[15]*b3;
+    }
+    return o;
+  },
+  rotY(r) {
+    const c = Math.cos(r), s = Math.sin(r);
+    return new Float32Array([c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]);
+  },
+  rotX(r) {
+    const c = Math.cos(r), s = Math.sin(r);
+    return new Float32Array([1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1]);
+  },
+  rotZ(r) {
+    const c = Math.cos(r), s = Math.sin(r);
+    return new Float32Array([c,s,0,0, -s,c,0,0, 0,0,1,0, 0,0,0,1]);
+  },
+  scale(sx, sy, sz) {
+    return new Float32Array([sx,0,0,0, 0,sy,0,0, 0,0,sz,0, 0,0,0,1]);
+  },
+  translate(x, y, z) {
+    return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, x,y,z,1]);
+  },
+  perspective(fovRad, aspect, near, far) {
+    const f = 1.0 / Math.tan(fovRad * 0.5);
+    const nf = 1.0 / (near - far);
+    return new Float32Array([
+      f / aspect, 0, 0, 0,
+      0, f, 0, 0,
+      0, 0, (far + near) * nf, -1,
+      0, 0, 2 * far * near * nf, 0,
+    ]);
+  },
+  lookAt(eye, target, up) {
+    let zx = eye[0]-target[0], zy = eye[1]-target[1], zz = eye[2]-target[2];
+    let zl = Math.hypot(zx, zy, zz) || 1; zx/=zl; zy/=zl; zz/=zl;
+    let xx = up[1]*zz - up[2]*zy, xy = up[2]*zx - up[0]*zz, xz = up[0]*zy - up[1]*zx;
+    let xl = Math.hypot(xx, xy, xz) || 1; xx/=xl; xy/=xl; xz/=xl;
+    let yx = zy*xz - zz*xy, yy = zz*xx - zx*xz, yz = zx*xy - zy*xx;
+    return new Float32Array([
+      xx, yx, zx, 0,
+      xy, yy, zy, 0,
+      xz, yz, zz, 0,
+      -(xx*eye[0]+xy*eye[1]+xz*eye[2]),
+      -(yx*eye[0]+yy*eye[1]+yz*eye[2]),
+      -(zx*eye[0]+zy*eye[1]+zz*eye[2]),
+      1,
+    ]);
+  },
+};
+
+function clamp(x, a, b) { return x < a ? a : (x > b ? b : x); }
+function smoothstep(e0, e1, x) {
+  const t = clamp((x - e0) / (e1 - e0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+function lerp(a, b, t) { return a + (b - a) * t; }
+function vNorm(v) { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0]/l, v[1]/l, v[2]/l]; }
+function vAdd(a, b) { return [a[0]+b[0], a[1]+b[1], a[2]+b[2]]; }
+function vSub(a, b) { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+function vScale(a, s) { return [a[0]*s, a[1]*s, a[2]*s]; }
+function vCross(a, b) { return [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]]; }
+function vDot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+
+/* ============================================================================
+ * WebGL2 Setup & Shader Helpers
+ * ========================================================================== */
+const canvas = document.getElementById('glcanvas');
+const gl = canvas.getContext('webgl2', { antialias: true, alpha: false, preserveDrawingBuffer: true });
+if (!gl) throw new Error('WebGL2 unavailable');
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) + '\n' + src);
+  return s;
+}
+function makeProg(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+
+/* ============================================================================
+ * 1. Background Shader (Pure Black Hologram vs Deep Museum Starfield)
+ * ========================================================================== */
+const BG_VS = `#version 300 es
+precision highp float;
+out vec2 vUv;
+void main() {
+  vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+  vUv = p;
+  gl_Position = vec4(p * 2.0 - 1.0, 0.9999, 1.0);
+}`;
+const BG_FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform float uMuseum;
+uniform float uTime;
+out vec4 fragColor;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+void main() {
+  if (uMuseum < 0.5) { fragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  vec2 c = vUv - vec2(0.54, 0.50);
+  vec3 col = mix(vec3(0.032, 0.038, 0.058), vec3(0.006, 0.008, 0.014), smoothstep(0.0, 0.85, length(c)));
+  // Subtle museum starfield
+  vec2 g = floor(vUv * 180.0);
+  vec2 f = fract(vUv * 180.0) - 0.5;
+  float r = hash(g);
+  if (r > 0.992) {
+    float tw = 0.65 + 0.35 * sin(uTime * 2.5 + r * 200.0);
+    float s = smoothstep(0.28, 0.02, length(f)) * tw * 0.65;
+    col += vec3(0.85, 0.90, 1.0) * s;
+  }
+  fragColor = vec4(col, 1.0);
+}`;
+const progBg = makeProg(BG_VS, BG_FS);
+
+/* ============================================================================
+ * 2. 3D Late Permian Pangaea Globe Shader (Continents, Tethys, Siberian Traps,
+ *    Ash Dimming, Desiccation & Super-Greenhouse Scorch!)
+ * ========================================================================== */
+const GLOBE_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+
+uniform mat4 uViewProj;
+uniform mat4 uModel;
+
+out vec3 vLocalDir;
+out vec3 vWorldPos;
+out vec3 vWorldNrm;
+
+void main() {
+  vLocalDir = normalize(aPos);
+  vec4 wp = uModel * vec4(aPos, 1.0);
+  vWorldPos = wp.xyz;
+  vWorldNrm = normalize(mat3(uModel) * aNrm);
+  gl_Position = uViewProj * wp;
+}`;
+
+const GLOBE_FS = `#version 300 es
+precision highp float;
+in vec3 vLocalDir;
+in vec3 vWorldPos;
+in vec3 vWorldNrm;
+
+uniform vec3 uCamPos;
+uniform vec3 uSunDir;
+uniform float uTime;
+uniform float uErupt;      // 0..1 Siberian Traps fissure eruption intensity
+uniform float uAsh;        // 0..1 Volcanic ash & aerosol cloud dimming
+uniform float uGreenhouse; // 0..1 CO2 greenhouse shell strength
+uniform float uWarmth;     // -0.5 (volcanic winter dip) .. 0 (normal) .. +1.0 (super-greenhouse extinction!)
+
+out vec4 fragColor;
+
+// Fast 3D gradient/value noise & FBM
+float hash3(vec3 p) {
+  p = fract(p * 0.3183099 + 0.1);
+  p *= 17.0;
+  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+float noise3(vec3 x) {
+  vec3 i = floor(x);
+  vec3 f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(mix(hash3(i+vec3(0,0,0)), hash3(i+vec3(1,0,0)), f.x),
+        mix(hash3(i+vec3(0,1,0)), hash3(i+vec3(1,1,0)), f.x), f.y),
+    mix(mix(hash3(i+vec3(0,0,1)), hash3(i+vec3(1,0,1)), f.x),
+        mix(hash3(i+vec3(0,1,1)), hash3(i+vec3(1,1,1)), f.x), f.y),
+    f.z
+  );
+}
+float fbm3(vec3 p) {
+  float v = 0.0, a = 0.5;
+  for (int i = 0; i < 3; i++) {
+    v += a * noise3(p);
+    p = p * 2.03 + vec3(13.7, 7.1, 19.3);
+    a *= 0.5;
+  }
+  return v;
+}
+float fbm(vec3 p) {
+  float v = 0.0, a = 0.5;
+  for (int i = 0; i < 4; i++) {
+    v += a * noise3(p);
+    p = p * 2.03 + vec3(13.7, 7.1, 19.3);
+    a *= 0.5;
+  }
+  return v;
+}
+
+// Late Permian (~252 Ma) C-shaped Pangaea supercontinent heightfield with crisp fractal coasts!
+float pangaeaHeight(vec3 d) {
+  // Fast 3-octave domain-warp for authentic irregular tectonic coastlines
+  vec3 dw = d + vec3(
+    fbm3(d * 3.1 + vec3(1.2, 4.7, 2.3)) - 0.5,
+    fbm3(d * 3.1 + vec3(8.3, 1.9, 5.1)) - 0.5,
+    fbm3(d * 3.1 + vec3(3.7, 9.2, 0.8)) - 0.5
+  ) * 0.16;
+  float latW = asin(clamp(dw.y, -1.0, 1.0));
+  float lonW = atan(dw.x, dw.z);
+  float dl = atan(sin(lonW + 0.12), cos(lonW + 0.12));
+
+  float baseLand = exp(-pow((dl + 0.22 * sin(latW * 1.4)) / 1.02, 2.0)) * 0.90;
+  float laurasia = exp(-pow((latW - 0.66) / 0.40, 2.0)) * exp(-pow((dl - 0.52) / 1.12, 2.0)) * 0.70;
+  float siberia  = exp(-pow((latW - 0.82) / 0.32, 2.0)) * exp(-pow((dl - 1.00) / 0.62, 2.0)) * 0.56;
+  float gondwana = exp(-pow((latW + 0.60) / 0.50, 2.0)) * exp(-pow((dl - 0.34) / 1.40, 2.0)) * 0.82;
+  float tethysCut = exp(-pow((latW - 0.06) / 0.36, 2.0)) * exp(-pow((dl - 0.88) / 0.68, 2.0)) * 1.02;
+
+  float detail = (fbm(d * 4.5) - 0.48) * 0.46 + (fbm3(d * 13.0) - 0.5) * 0.18;
+  return (baseLand + laurasia + siberia + gondwana - tethysCut) + detail - 0.58;
+}
+
+// Sharp jagged tectonic volcanic rift fissures (Siberian Traps flood basalts!)
+float volcanicFissures(vec3 d, out float basaltCrust) {
+  vec3 sibCenter = normalize(vec3(0.42, 0.72, 0.55));
+  float zone1 = smoothstep(0.42, 0.05, length(d - sibCenter));
+
+  vec3 sib2 = normalize(vec3(-0.34, 0.64, -0.69));
+  float zone2 = smoothstep(0.35, 0.05, length(d - sib2)) * 0.85;
+
+  float zone = clamp(zone1 + zone2, 0.0, 1.0);
+  basaltCrust = smoothstep(0.18, 0.62, zone);
+  if (zone < 0.002) return 0.0;
+
+  // Domain-warped ridged noise -> razor-sharp branching volcanic rift veins!
+  vec3 w = d * 6.5 + vec3(fbm3(d * 5.0), fbm3(d * 5.0 + vec3(7.3)), fbm3(d * 5.0 + vec3(14.1))) * 1.15;
+  float r1 = 1.0 - abs(noise3(w * 2.1) * 2.0 - 1.0);
+  float r2 = 1.0 - abs(noise3(w * 4.4 + vec3(3.1, 8.2, 5.7)) * 2.0 - 1.0);
+  float veins = pow(clamp(r1, 0.0, 1.0), 8.5) * 1.4 + pow(clamp(r2, 0.0, 1.0), 10.0) * 0.9;
+
+  float cald1 = exp(-pow(length(d - sibCenter) / 0.075, 2.0));
+  float cald2 = exp(-pow(length(d - normalize(vec3(0.28, 0.79, 0.54))) / 0.06, 2.0));
+  float cald3 = exp(-pow(length(d - normalize(vec3(0.55, 0.64, 0.53))) / 0.055, 2.0));
+  float cald4 = exp(-pow(length(d - sib2) / 0.07, 2.0));
+  float calderas = (cald1 + cald2 + cald3 + cald4) * 0.95;
+
+  return clamp(zone * veins + calderas * smoothstep(0.05, 0.25, zone), 0.0, 1.5);
+}
+
+void main() {
+  vec3 d = normalize(vLocalDir);
+  float h = pangaeaHeight(d);
+  float isLand = smoothstep(-0.012, 0.015, h);
+
+  // Exact screen-space surface-gradient bump mapping (3x faster than finite differences!)
+  vec3 Nw = normalize(vWorldNrm);
+  vec3 dp1 = dFdx(vWorldPos);
+  vec3 dp2 = dFdy(vWorldPos);
+  float dh1 = dFdx(h);
+  float dh2 = dFdy(h);
+  vec3 r1 = cross(dp2, Nw);
+  vec3 r2 = cross(Nw, dp1);
+  float det = dot(dp1, r1);
+  vec3 surfGrad = sign(det) * (dh1 * r1 + dh2 * r2);
+  vec3 Nbump = normalize(abs(det) * Nw - surfGrad * (isLand * 0.42) + Nw * 1e-6);
+
+  vec3 V = normalize(uCamPos - vWorldPos);
+  vec3 L = normalize(uSunDir);
+  float NoL = dot(Nbump, L);
+  float diff = smoothstep(-0.20, 0.88, NoL);
+
+  float lat = abs(d.y);
+  float warmPos = clamp(uWarmth, 0.0, 1.0);
+  float coolNeg = clamp(-uWarmth * 2.0, 0.0, 1.0);
+  float micro = fbm(d * 14.0);
+  float fine  = fbm(d * 28.0);
+
+  // ---- OCEAN COLORING (Deep Sapphire Panthalassa + Turquoise Tethys -> Anoxic Dying Ocean!) ----
+  float shallow = smoothstep(-0.18, -0.004, h);
+  vec3 deepHealthy   = vec3(0.012, 0.088, 0.30);
+  vec3 shelfHealthy  = vec3(0.035, 0.38, 0.54);
+  vec3 deepDead      = vec3(0.10, 0.042, 0.035);
+  vec3 shelfDead     = vec3(0.32, 0.13, 0.055);
+  vec3 oceanHealthy  = mix(deepHealthy, shelfHealthy, shallow);
+  vec3 oceanDead     = mix(deepDead, shelfDead, shallow);
+  vec3 oceanCol      = mix(oceanHealthy, oceanDead, smoothstep(0.18, 0.96, warmPos));
+  oceanCol = mix(oceanCol, vec3(0.03, 0.13, 0.25), coolNeg * 0.45);
+
+  // ---- LAND COLORING (Rich Vibrant Emerald Late Permian Forests -> Parched Red-Ochre Desert!) ----
+  vec3 forestDeep  = vec3(0.032, 0.195, 0.048);
+  vec3 forestLush  = vec3(0.075, 0.310, 0.078);
+  vec3 savanna     = vec3(0.240, 0.320, 0.105);
+  vec3 mtnRock     = vec3(0.260, 0.235, 0.185);
+  float elev = clamp(h * 1.45, 0.0, 1.0);
+  vec3 landHealthy = mix(forestDeep, forestLush, micro);
+  // Subtle dry-ish interior patch near arid central Pangaea, keeping continent unmistakably lush green!
+  float aridSpot = smoothstep(0.35, 0.85, elev) * (1.0 - lat * 1.1) * smoothstep(0.40, 0.72, fine);
+  landHealthy = mix(landHealthy, savanna, aridSpot * 0.55);
+  // Crisp mountain spine highlights only on highest ridges
+  landHealthy = mix(landHealthy, mtnRock, smoothstep(0.68, 0.96, elev) * 0.75);
+
+  // Scorched super-greenhouse terracotta badlands & cracked red desert!
+  vec3 scorchLow  = vec3(0.36, 0.12, 0.045);
+  vec3 scorchMid  = vec3(0.58, 0.22, 0.080);
+  vec3 scorchPeak = vec3(0.24, 0.085, 0.048);
+  vec3 landScorch = mix(scorchLow, scorchMid, micro * 0.75 + fine * 0.25);
+  landScorch = mix(landScorch, scorchPeak, smoothstep(0.58, 0.92, elev));
+
+  float parchMask = smoothstep(0.06, 0.86, warmPos * 1.18 - lat * 0.16 + micro * 0.16);
+  vec3 landCol = mix(landHealthy, landScorch, parchMask);
+
+  // Dark flood-basalt crust forming around the Siberian Traps fissures during eruption!
+  float basaltCrust = 0.0;
+  float fissures = volcanicFissures(d, basaltCrust);
+  landCol = mix(landCol, vec3(0.055, 0.042, 0.038), basaltCrust * uErupt * 0.82);
+
+  // Polar ice / frost caps (expand subtly during ash winter dip, vanish completely in greenhouse!)
+  float iceLat = mix(0.85, 0.71, coolNeg) + warmPos * 0.38;
+  float polarIce = smoothstep(iceLat - 0.05, iceLat + 0.05, lat + (micro - 0.5) * 0.08);
+  vec3 surfaceCol = mix(oceanCol, landCol, isLand);
+  surfaceCol = mix(surfaceCol, vec3(0.84, 0.92, 0.98), polarIce * (1.0 - warmPos));
+
+  // ---- LIGHTING & OCEAN SPECULAR ----
+  float sunDim = mix(1.0, 0.42, uAsh);
+  vec3 sunTint = mix(vec3(1.06, 0.99, 0.90), vec3(1.22, 0.72, 0.40), warmPos * 0.78);
+  sunTint = mix(sunTint, vec3(0.70, 0.82, 0.96), coolNeg * 0.65);
+
+  vec3 H = normalize(L + V);
+  float specPow = mix(46.0, 8.0, isLand);
+  float specAmt = mix(0.45, 0.02, isLand) * (1.0 - uAsh * 0.75) * (1.0 - warmPos * 0.45);
+  float spec = pow(max(dot(Nw, H), 0.0), specPow) * specAmt * max(dot(Nw, L), 0.0);
+
+  vec3 fillCol = mix(vec3(0.08, 0.13, 0.22), vec3(0.24, 0.085, 0.038), warmPos);
+  fillCol = mix(fillCol, vec3(0.05, 0.13, 0.24), coolNeg);
+  vec3 lit = surfaceCol * (fillCol + sunTint * diff * 1.44 * sunDim) + sunTint * spec;
+
+  // ---- WEATHER CLOUDS (Clean Permian Cumulus -> Dramatic Swirling Charcoal Volcanic Storm Bands!) ----
+  vec3 cloudCoord = d * 3.8 + vec3(uTime * 0.055, uTime * 0.015, -uTime * 0.04);
+  float cNoise = fbm(cloudCoord);
+  float whiteClouds = smoothstep(0.55, 0.78, cNoise) * (1.0 - warmPos * 0.76) * (1.0 - uAsh * 0.90) * 0.58;
+  lit = mix(lit, vec3(0.90, 0.94, 1.0) * (0.24 + 0.86 * diff), whiteClouds);
+
+  // High-contrast turbulent volcanic ash storm bands (lets darkened Pangaea & glowing vents show through gaps!)
+  vec3 ashWarp = d * 3.8 + vec3(fbm(d * 3.0 + vec3(uTime * 0.06)) * 0.65, -uTime * 0.02, uTime * 0.08);
+  float ashSwirl = fbm(ashWarp * 1.5);
+  float ashStorm = smoothstep(0.28, 0.76, ashSwirl + 0.14 * sin(d.y * 12.0 + ashSwirl * 4.0));
+  float ashCover = ashStorm * uAsh * 0.78;
+  vec3 ashDark = vec3(0.045, 0.045, 0.052);
+  vec3 ashSulf = vec3(0.28, 0.25, 0.22);
+  vec3 ashCol = mix(ashDark, ashSulf, smoothstep(0.32, 0.78, ashSwirl) * (0.35 + 0.65 * diff));
+  lit = mix(lit, ashCol, ashCover);
+
+  // ---- INCANDESCENT SIBERIAN TRAPS VOLCANIC FISSURES (Burns Fiercely Through Ash Veil!) ----
+  float pulse = 0.84 + 0.16 * sin(uTime * 5.8 + d.x * 18.0 + d.z * 16.0);
+  float lavaGlow = fissures * uErupt * pulse;
+  vec3 lavaCol = mix(vec3(1.2, 0.20, 0.01), vec3(2.2, 1.05, 0.32), smoothstep(0.25, 0.90, fissures));
+  lit += lavaCol * lavaGlow * 1.55;
+
+  // ---- SURFACE ATMOSPHERIC RIM SCATTER ----
+  float fres = pow(1.0 - max(dot(Nw, V), 0.0), 2.8);
+  vec3 rimCol = mix(vec3(0.22, 0.64, 1.0), vec3(1.0, 0.34, 0.08), clamp(uGreenhouse * 0.9 + warmPos * 0.5, 0.0, 1.0));
+  rimCol = mix(rimCol, vec3(0.30, 0.44, 0.58), uAsh * 0.72);
+  lit += rimCol * fres * (0.48 + 0.45 * uGreenhouse);
+
+  // Filmic ACES rolloff + sRGB
+  lit = (lit * (2.51 * lit + 0.03)) / (lit * (2.43 * lit + 0.59) + 0.14);
+  lit = pow(clamp(lit, 0.0, 1.0), vec3(1.0 / 2.2));
+  fragColor = vec4(lit, 1.0);
+}`;
+const progGlobe = makeProg(GLOBE_VS, GLOBE_FS);
+
+/* ============================================================================
+ * 3. Outer Translucent Atmosphere / Ash Veil / CO2 Greenhouse Blanket Shell!
+ * ========================================================================== */
+const ATMO_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+uniform mat4 uViewProj;
+uniform mat4 uModel;
+out vec3 vLocalDir;
+out vec3 vWorldPos;
+out vec3 vWorldNrm;
+void main() {
+  vLocalDir = normalize(aPos);
+  vec4 wp = uModel * vec4(aPos, 1.0);
+  vWorldPos = wp.xyz;
+  vWorldNrm = normalize(mat3(uModel) * aNrm);
+  gl_Position = uViewProj * wp;
+}`;
+
+const ATMO_FS = `#version 300 es
+precision highp float;
+in vec3 vLocalDir;
+in vec3 vWorldPos;
+in vec3 vWorldNrm;
+
+uniform vec3 uCamPos;
+uniform vec3 uSunDir;
+uniform float uTime;
+uniform float uAsh;
+uniform float uGreenhouse;
+uniform float uWarmth;
+
+out vec4 fragColor;
+
+float hash3(vec3 p) {
+  p = fract(p * 0.3183099 + 0.1); p *= 17.0;
+  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+float noise3(vec3 x) {
+  vec3 i = floor(x), f = fract(x); f = f*f*(3.0-2.0*f);
+  return mix(
+    mix(mix(hash3(i+vec3(0,0,0)), hash3(i+vec3(1,0,0)), f.x),
+        mix(hash3(i+vec3(0,1,0)), hash3(i+vec3(1,1,0)), f.x), f.y),
+    mix(mix(hash3(i+vec3(0,0,1)), hash3(i+vec3(1,0,1)), f.x),
+        mix(hash3(i+vec3(0,1,1)), hash3(i+vec3(1,1,1)), f.x), f.y),
+    f.z
+  );
+}
+
+void main() {
+  vec3 N = normalize(vWorldNrm);
+  vec3 V = normalize(uCamPos - vWorldPos);
+  vec3 L = normalize(uSunDir);
+  float ndv = abs(dot(N, V));
+  float rim = pow(clamp(1.0 - ndv, 0.0, 1.0), 2.1);
+  float outerEdge = smoothstep(0.0, 0.16, ndv); // softens outermost edge cleanly
+
+  // Swirling atmospheric gas & ash turbulence
+  vec3 d = normalize(vLocalDir);
+  float swirl1 = noise3(d * 4.2 + vec3(uTime * 0.18, -uTime * 0.06, uTime * 0.12));
+  float swirl2 = noise3(d * 8.5 + vec3(-uTime * 0.25, uTime * 0.10, -uTime * 0.15));
+  float gas = swirl1 * 0.65 + swirl2 * 0.35;
+
+  // 1) Healthy thin sapphire-cyan Rayleigh atmosphere halo
+  vec3 healthyCol = vec3(0.24, 0.64, 1.0);
+  float healthyAlpha = rim * 0.34 * (1.0 - uAsh * 0.85) * (1.0 - uGreenhouse * 0.85);
+
+  // 2) Dense turbulent dark-gray/sulfur volcanic ash shell (Phase 2!)
+  vec3 ashCol = mix(vec3(0.20, 0.18, 0.18), vec3(0.56, 0.50, 0.44), smoothstep(0.3, 0.85, gas) * (0.4 + 0.6 * max(dot(N, L), 0.0)));
+  float ashAlpha = (0.20 + 0.58 * rim) * (0.55 + 0.45 * gas) * uAsh;
+
+  // 3) Glowing amber-orange/crimson CO2 greenhouse blanket (Phase 3 & 4!)
+  //    Clearly reads as an enveloping heat-trapping shell!
+  vec3 ghInner = mix(vec3(0.96, 0.56, 0.14), vec3(1.0, 0.28, 0.08), clamp(uWarmth, 0.0, 1.0));
+  vec3 ghRim   = mix(vec3(1.0, 0.76, 0.28), vec3(1.0, 0.42, 0.12), clamp(uWarmth, 0.0, 1.0));
+  vec3 ghCol   = mix(ghInner, ghRim, rim) * (0.78 + 0.42 * gas);
+  // Subtle pulsing infrared bounce energy shimmering along the shell!
+  float pulse = 0.90 + 0.10 * sin(uTime * 3.8 + d.y * 8.0);
+  float ghAlpha = (0.08 + 0.62 * pow(clamp(1.0 - ndv, 0.0, 1.0), 1.55)) * (0.72 + 0.28 * gas) * uGreenhouse * pulse;
+
+  vec3 col = healthyCol * healthyAlpha + ashCol * ashAlpha + ghCol * ghAlpha;
+  float alpha = clamp((healthyAlpha + ashAlpha + ghAlpha) * outerEdge, 0.0, 0.88);
+  if (alpha < 0.005) discard;
+  fragColor = vec4(col / max(alpha, 0.001), alpha);
+}`;
+const progAtmo = makeProg(ATMO_VS, ATMO_FS);
+
+/* ============================================================================
+ * 4. Luminous 3D Ribbon / Ray / Arrow / Bounce-Ring Shader (Sunrays & Heat!)
+ * ========================================================================== */
+const RAY_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec4 aCol;  // rgb + alpha
+layout(location=2) in vec2 aUv;   // u = along ray [0..1], v = across width [-1..1]
+
+uniform mat4 uViewProj;
+out vec4 vCol;
+out vec2 vUv;
+
+void main() {
+  vCol = aCol;
+  vUv = aUv;
+  gl_Position = uViewProj * vec4(aPos, 1.0);
+}`;
+
+const RAY_FS = `#version 300 es
+precision highp float;
+in vec4 vCol;
+in vec2 vUv;
+uniform float uTime;
+out vec4 fragColor;
+
+void main() {
+  // Bright glowing core along center of ribbon, soft radiant falloff to edges
+  float across = abs(vUv.y);
+  float core = smoothstep(1.0, 0.15, across);
+  float hotCenter = smoothstep(0.55, 0.0, across);
+
+  // Subtle flowing energy shimmer along the ray
+  float flow = 0.82 + 0.18 * sin(vUv.x * 16.0 - uTime * 9.0);
+  vec3 col = vCol.rgb * flow + vec3(0.45, 0.42, 0.35) * hotCenter * 0.65;
+  float alpha = vCol.a * core;
+  if (alpha < 0.01) discard;
+  fragColor = vec4(col, alpha);
+}`;
+const progRay = makeProg(RAY_VS, RAY_FS);
+
+/* ============================================================================
+ * 5. Volumetric Soft Particle Shader (Solar Corona, Ash Plumes, Magma Sparks!)
+ * ========================================================================== */
+const PART_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec4 aPosSize; // xyz, w = world size
+layout(location=1) in vec4 aCol;     // rgba
+layout(location=2) in float aKind;   // 0 = soft glow/sun/ember, 1 = billowy smoke puff
+
+uniform mat4 uViewProj;
+uniform float uScalePx;
+out vec4 vCol;
+out float vKind;
+
+void main() {
+  vec4 clip = uViewProj * vec4(aPosSize.xyz, 1.0);
+  gl_Position = clip;
+  gl_PointSize = clamp((aPosSize.w * uScalePx) / max(clip.w, 0.25), 2.0, 260.0);
+  vCol = aCol;
+  vKind = aKind;
+}`;
+
+const PART_FS = `#version 300 es
+precision highp float;
+in vec4 vCol;
+in float vKind;
+out vec4 fragColor;
+
+void main() {
+  vec2 c = gl_PointCoord - 0.5;
+  float r = length(c) * 2.0;
+  if (r > 1.0) discard;
+  float a;
+  vec3 col = vCol.rgb;
+  if (vKind < 0.5) {
+    // Radiant glowing orb / spark / sun flare
+    float core = exp(-r * r * 4.2);
+    float halo = pow(1.0 - r, 2.4);
+    a = clamp((core * 0.85 + halo * 0.55) * vCol.a, 0.0, 1.0);
+    col = col + vec3(0.6, 0.55, 0.4) * core * 0.55;
+  } else {
+    // Soft smoky volcanic ash puff
+    a = smoothstep(1.0, 0.12, r) * vCol.a;
+  }
+  if (a < 0.005) discard;
+  fragColor = vec4(col, a);
+}`;
+const progPart = makeProg(PART_VS, PART_FS);
+
+/* ============================================================================
+ * 6. Clean Language-Neutral Glowing Thermometer Overlay Shader (Screen-Space!)
+ *    Works identically across DE / IT / EN hologram faces with zero text!
+ * ========================================================================== */
+const THERMO_VS = `#version 300 es
+precision highp float;
+out vec2 vUv;
+void main() {
+  vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+  vUv = p;
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+
+const THERMO_FS = `#version 300 es
+precision highp float;
+in vec2 vUv;
+uniform float uAspect;
+uniform float uTemp;   // 0.0 (deep volcanic chill) .. 0.42 (Permian equilibrium) .. 1.0 (super-greenhouse spike!)
+uniform float uTime;
+uniform float uShow;
+out vec4 fragColor;
+
+// Signed distance to a vertical capsule from y0 to y1 at x=0 with radius r
+float sdCapsuleY(vec2 p, float y0, float y1, float r) {
+  p.y -= clamp(p.y, y0, y1);
+  return length(p) - r;
+}
+
+vec3 tempColor(float t) {
+  // Cold ice cyan -> balanced emerald -> warm amber -> blazing crimson
+  vec3 cCold = vec3(0.24, 0.78, 1.00);
+  vec3 cEq   = vec3(0.24, 0.88, 0.56);
+  vec3 cWarm = vec3(1.00, 0.68, 0.14);
+  vec3 cHot  = vec3(1.00, 0.16, 0.08);
+  if (t < 0.42) return mix(cCold, cEq, smoothstep(0.10, 0.42, t));
+  if (t < 0.72) return mix(cEq, cWarm, smoothstep(0.42, 0.72, t));
+  return mix(cWarm, cHot, smoothstep(0.72, 0.96, t));
+}
+
+void main() {
+  if (uShow < 0.5) discard;
+
+  // Place sleek iconic thermometer cleanly along left side (inside safe hologram margin!)
+  // Normalized aspect-corrected coords around thermometer center
+  vec2 p = vUv;
+  // Horizontal anchor: keeps comfortable black border on square 1:1 AND generous gap from bouncing heat rays!
+  float cx = mix(0.086, 0.068, clamp((uAspect - 1.0) / 0.8, 0.0, 1.0));
+  vec2 q = vec2((p.x - cx) * uAspect, p.y - 0.50);
+
+  // Thermometer geometry
+  float bulbY = -0.23;
+  float bulbR = 0.038;
+  float tubeBot = -0.21;
+  float tubeTop =  0.25;
+  float tubeR = 0.0175;
+
+  float dBulb = length(q - vec2(0.0, bulbY)) - bulbR;
+  float dTube = sdCapsuleY(q, tubeBot, tubeTop, tubeR);
+  float dOuter = min(dBulb, dTube);
+
+  float dBulbIn = length(q - vec2(0.0, bulbY)) - (bulbR - 0.0075);
+  float dTubeIn = sdCapsuleY(q, tubeBot, tubeTop - 0.004, tubeR - 0.0065);
+  float dInner = min(dBulbIn, dTubeIn);
+
+  vec3 col = vec3(0.0);
+  float alpha = 0.0;
+
+  // Dynamic temperature fill level
+  float fillY = mix(tubeBot + 0.02, tubeTop - 0.01, clamp(uTemp, 0.02, 1.0));
+  vec3 tCol = tempColor(uTemp);
+  float hotPulse = 1.0 + 0.22 * smoothstep(0.75, 1.0, uTemp) * (0.5 + 0.5 * sin(uTime * 8.0));
+
+  // Subtle ambient heat/cold glow halo around the bulb & active fill
+  float dFill = min(dBulbIn, sdCapsuleY(q, tubeBot, fillY, tubeR - 0.0065));
+  float halo = exp(-max(dFill, 0.0) * 34.0) * (0.38 + 0.28 * smoothstep(0.6, 1.0, uTemp)) * hotPulse;
+  col += tCol * halo;
+  alpha = max(alpha, halo * 0.85);
+
+  // Dark glass interior backing
+  float inMask = smoothstep(0.003, -0.003, dInner);
+  if (inMask > 0.0) {
+    col = mix(col, vec3(0.04, 0.05, 0.06), inMask * 0.75);
+    alpha = max(alpha, inMask * 0.78);
+  }
+
+  // Luminous liquid mercury/plasma column!
+  float fillMask = smoothstep(0.0025, -0.0025, dFill);
+  if (fillMask > 0.0) {
+    // Glossy specular highlight streak along left edge of liquid
+    float gloss = exp(-pow((q.x + 0.005) / 0.005, 2.0)) * 0.45;
+    vec3 liq = tCol * hotPulse + vec3(0.45, 0.42, 0.38) * gloss;
+    col = mix(col, liq, fillMask);
+    alpha = max(alpha, fillMask);
+  }
+
+  // Crisp frosted-glass outline rim
+  float rimMask = smoothstep(0.004, 0.0, abs(dOuter)) * 0.85;
+  col = mix(col, vec3(0.78, 0.84, 0.90), rimMask);
+  alpha = max(alpha, rimMask);
+
+  // Graduation tick marks on right edge of tube + prominent Permian baseline equilibrium notch!
+  for (int i = 0; i <= 6; i++) {
+    float ty = mix(tubeBot + 0.05, tubeTop - 0.015, float(i) / 6.0);
+    bool isBase = (i == 2); // ~0.42 equilibrium line
+    float tw = isBase ? 0.022 : 0.012;
+    float th = isBase ? 0.0034 : 0.0022;
+    float dx = abs(q.x - (tubeR + 0.006 + tw * 0.5)) - tw * 0.5;
+    float dy = abs(q.y - ty) - th;
+    float dTick = max(dx, dy);
+    float tm = smoothstep(0.002, -0.001, dTick);
+    if (tm > 0.0) {
+      vec3 tc = isBase ? vec3(0.45, 0.96, 0.68) : vec3(0.62, 0.68, 0.76);
+      col = mix(col, tc, tm);
+      alpha = max(alpha, tm * (isBase ? 0.95 : 0.65));
+    }
+  }
+
+  // Iconic small upward/downward trend chevron next to liquid meniscus (zero words!)
+  float dyTip = q.y - fillY;
+  float dxTip = q.x - (tubeR + 0.036);
+  // Glowing indicator pip sliding smoothly with meniscus
+  float dPip = length(vec2(dxTip, dyTip)) - 0.0075;
+  float pipM = smoothstep(0.0025, -0.002, dPip);
+  if (pipM > 0.0) {
+    col = mix(col, tCol * 1.25, pipM);
+    alpha = max(alpha, pipM);
+  }
+
+  if (alpha < 0.005) discard;
+  fragColor = vec4(clamp(col, 0.0, 1.0), clamp(alpha, 0.0, 1.0));
+}`;
+const progThermo = makeProg(THERMO_VS, THERMO_FS);
+
+/* ============================================================================
+ * Build High-Res Sphere VAO (Shared by Pangaea Globe & Atmosphere Shell)
+ * ========================================================================== */
+function buildSphereVAO(latSeg = 64, lonSeg = 112) {
+  const pos = [], nrm = [], idx = [];
+  for (let iy = 0; iy <= latSeg; iy++) {
+    const v = iy / latSeg;
+    const phi = v * Math.PI;
+    const sp = Math.sin(phi), cp = Math.cos(phi);
+    for (let ix = 0; ix <= lonSeg; ix++) {
+      const u = ix / lonSeg;
+      const th = u * Math.PI * 2;
+      const x = sp * Math.sin(th);
+      const y = cp;
+      const z = sp * Math.cos(th);
+      pos.push(x, y, z);
+      nrm.push(x, y, z);
+    }
+  }
+  const stride = lonSeg + 1;
+  for (let iy = 0; iy < latSeg; iy++) {
+    for (let ix = 0; ix < lonSeg; ix++) {
+      const a = iy * stride + ix, b = a + 1, c = a + stride, d = c + 1;
+      idx.push(a, c, d, a, d, b);
+    }
+  }
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const mk = (loc, arr) => {
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 3, gl.FLOAT, false, 0, 0);
+  };
+  mk(0, pos); mk(1, nrm);
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(idx), gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  return { vao, count: idx.length };
+}
+const sphereMesh = buildSphereVAO(64, 112);
+
+/* ============================================================================
+ * Dynamic 3D Ribbon Geometry Builder (Sunrays, Deflected Rays, Trapped Heat!)
+ * ========================================================================== */
+const MAX_RAY_VERTS = 24000;
+const rayPos = new Float32Array(MAX_RAY_VERTS * 3);
+const rayCol = new Float32Array(MAX_RAY_VERTS * 4);
+const rayUv  = new Float32Array(MAX_RAY_VERTS * 2);
+let rayCount = 0;
+
+const rayVao = gl.createVertexArray();
+gl.bindVertexArray(rayVao);
+const rayPosBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, rayPosBuf);
+gl.bufferData(gl.ARRAY_BUFFER, rayPos.byteLength, gl.DYNAMIC_DRAW);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+
+const rayColBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, rayColBuf);
+gl.bufferData(gl.ARRAY_BUFFER, rayCol.byteLength, gl.DYNAMIC_DRAW);
+gl.enableVertexAttribArray(1);
+gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, 0);
+
+const rayUvBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, rayUvBuf);
+gl.bufferData(gl.ARRAY_BUFFER, rayUv.byteLength, gl.DYNAMIC_DRAW);
+gl.enableVertexAttribArray(2);
+gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+gl.bindVertexArray(null);
+
+function pushRayTri(p0, p1, p2, c0, c1, c2, u0, u1, u2) {
+  if (rayCount + 3 > MAX_RAY_VERTS) return;
+  const i3 = rayCount * 3, i4 = rayCount * 4, i2 = rayCount * 2;
+  rayPos[i3]=p0[0]; rayPos[i3+1]=p0[1]; rayPos[i3+2]=p0[2];
+  rayPos[i3+3]=p1[0]; rayPos[i3+4]=p1[1]; rayPos[i3+5]=p1[2];
+  rayPos[i3+6]=p2[0]; rayPos[i3+7]=p2[1]; rayPos[i3+8]=p2[2];
+  for (let k=0;k<4;k++) { rayCol[i4+k]=c0[k]; rayCol[i4+4+k]=c1[k]; rayCol[i4+8+k]=c2[k]; }
+  rayUv[i2]=u0[0]; rayUv[i2+1]=u0[1];
+  rayUv[i2+2]=u1[0]; rayUv[i2+3]=u1[1];
+  rayUv[i2+4]=u2[0]; rayUv[i2+5]=u2[1];
+  rayCount += 3;
+}
+
+// Camera-facing 3D glowing ribbon + crisp arrowhead along any 3D polyline!
+function addArrowRibbon(pts, widths, colors, eyePos, headLen = 0.12, headWid = 0.072) {
+  const n = pts.length;
+  if (n < 2) return;
+  const sideDirs = [];
+  for (let i = 0; i < n; i++) {
+    const tang = i === 0 ? vSub(pts[1], pts[0])
+               : i === n - 1 ? vSub(pts[n-1], pts[n-2])
+               : vSub(pts[i+1], pts[i-1]);
+    const viewDir = vSub(eyePos, pts[i]);
+    sideDirs.push(vNorm(vCross(tang, viewDir)));
+  }
+  for (let i = 0; i < n - 1; i++) {
+    const u0 = i / (n - 1), u1 = (i + 1) / (n - 1);
+    const s0 = vScale(sideDirs[i], widths[i]);
+    const s1 = vScale(sideDirs[i+1], widths[i+1]);
+    const a = vSub(pts[i], s0),   b = vAdd(pts[i], s0);
+    const c = vSub(pts[i+1], s1), d = vAdd(pts[i+1], s1);
+    pushRayTri(a, b, d, colors[i], colors[i], colors[i+1], [u0,-1], [u0,1], [u1,1]);
+    pushRayTri(a, d, c, colors[i], colors[i+1], colors[i+1], [u0,-1], [u1,1], [u1,-1]);
+  }
+  if (headLen > 0) {
+    const tip = pts[n - 1];
+    const dir = vNorm(vSub(pts[n - 1], pts[n - 2]));
+    const base = vSub(tip, vScale(dir, headLen));
+    const s = vScale(sideDirs[n - 1], headWid);
+    const colTip = colors[n - 1];
+    const pTip = vAdd(tip, vScale(dir, headLen * 0.25));
+    pushRayTri(vSub(base, s), vAdd(base, s), pTip, colTip, colTip, colTip, [1,-0.9], [1,0.9], [1,0]);
+  }
+}
+
+// Glowing thermal impact / bounce ring lying tangent to a sphere surface!
+function addBounceRing(center, normal, radius, thickness, color) {
+  const n = vNorm(normal);
+  const ref = Math.abs(n[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  const t1 = vNorm(vCross(n, ref));
+  const t2 = vNorm(vCross(n, t1));
+  const segs = 22;
+  const rIn = Math.max(0.005, radius - thickness);
+  const rOut = radius + thickness;
+  for (let i = 0; i < segs; i++) {
+    const a0 = (i / segs) * Math.PI * 2;
+    const a1 = ((i + 1) / segs) * Math.PI * 2;
+    const d0 = vAdd(vScale(t1, Math.cos(a0)), vScale(t2, Math.sin(a0)));
+    const d1 = vAdd(vScale(t1, Math.cos(a1)), vScale(t2, Math.sin(a1)));
+    const p0i = vAdd(center, vScale(d0, rIn));
+    const p0o = vAdd(center, vScale(d0, rOut));
+    const p1i = vAdd(center, vScale(d1, rIn));
+    const p1o = vAdd(center, vScale(d1, rOut));
+    pushRayTri(p0i, p0o, p1o, color, color, color, [0,-0.8], [0,0.8], [1,0.8]);
+    pushRayTri(p0i, p1o, p1i, color, color, color, [0,-0.8], [1,0.8], [1,-0.8]);
+  }
+}
+
+/* ============================================================================
+ * Dynamic Soft Particle Buffer (Sun Corona, Eruption Plumes & Lava Sparks!)
+ * ========================================================================== */
+const MAX_PARTS = 512;
+const partPosSize = new Float32Array(MAX_PARTS * 4);
+const partCol     = new Float32Array(MAX_PARTS * 4);
+const partKind    = new Float32Array(MAX_PARTS);
+let partCount = 0;
+
+const partVao = gl.createVertexArray();
+gl.bindVertexArray(partVao);
+const pBuf0 = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, pBuf0);
+gl.bufferData(gl.ARRAY_BUFFER, partPosSize.byteLength, gl.DYNAMIC_DRAW);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
+
+const pBuf1 = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, pBuf1);
+gl.bufferData(gl.ARRAY_BUFFER, partCol.byteLength, gl.DYNAMIC_DRAW);
+gl.enableVertexAttribArray(1);
+gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, 0);
+
+const pBuf2 = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, pBuf2);
+gl.bufferData(gl.ARRAY_BUFFER, partKind.byteLength, gl.DYNAMIC_DRAW);
+gl.enableVertexAttribArray(2);
+gl.vertexAttribPointer(2, 1, gl.FLOAT, false, 0, 0);
+gl.bindVertexArray(null);
+
+function pushPart(x, y, z, size, r, g, b, a, kind = 0) {
+  if (partCount >= MAX_PARTS) return;
+  const i4 = partCount * 4;
+  partPosSize[i4]=x; partPosSize[i4+1]=y; partPosSize[i4+2]=z; partPosSize[i4+3]=size;
+  partCol[i4]=r; partCol[i4+1]=g; partCol[i4+2]=b; partCol[i4+3]=a;
+  partKind[partCount] = kind;
+  partCount++;
+}
+
+// Deterministic volcano eruption seeds anchored to Siberian Traps + secondary flank vent
+const VOLCANO_VENTS = [
+  vNorm([0.42, 0.72, 0.55]),   // Primary Siberian Traps fissure cluster
+  vNorm([0.28, 0.79, 0.54]),   // Secondary Siberian fissure
+  vNorm([0.55, 0.64, 0.53]),   // Eastern Siberian crater
+  vNorm([-0.34, 0.64, -0.69]), // Opposite-flank fissure (visible during rear turntable sweep!)
+];
+const PLUME_SEEDS = Array.from({ length: 140 }, (_, i) => {
+  const rnd = (k) => { const x = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return x - Math.floor(x); };
+  return {
+    vent: i % VOLCANO_VENTS.length,
+    phase: rnd(1),
+    speed: 0.45 + rnd(2) * 0.45,
+    spreadA: rnd(3) * Math.PI * 2,
+    spreadR: 0.05 + rnd(4) * 0.24,
+    isSpark: i >= 92,
+    size: i >= 92 ? (0.045 + rnd(5) * 0.045) : (0.14 + rnd(5) * 0.16),
+  };
+});
+
+/* ============================================================================
+ * 4-Phase Scientific Timeline State Function (p in [0..1])
+ * ========================================================================== */
+function evalExtinctionPhase(p) {
+  // Phase 1 [0.00..0.20]: Healthy Late Permian Pangaea
+  // Phase 2 [0.20..0.44]: Siberian Traps mega-eruptions + Ash dimming (brief volcanic cooling!)
+  // Phase 3 [0.44..0.74]: CO2 Greenhouse blanket forms -> sunrays enter, heat bounces & traps!
+  // Phase 4 [0.74..1.00]: Runaway Super-Greenhouse (+10 °C) & Mass Extinction!
+
+  // Volcanic fissure eruption erupts strongly at p=0.20, stays intensely active then smolders
+  const eruptUp = smoothstep(0.18, 0.27, p);
+  const eruptDecay = 1.0 - 0.30 * smoothstep(0.55, 0.92, p);
+  const erupt = eruptUp * eruptDecay;
+
+  // Dense volcanic ash & aerosol dimming spikes during Phase 2, settles as CO2 takes over
+  const ash = smoothstep(0.21, 0.31, p) * (1.0 - smoothstep(0.42, 0.55, p));
+
+  // Luminous CO2 greenhouse blanket builds from p=0.40 through Phase 3 & 4
+  const greenhouse = smoothstep(0.39, 0.60, p);
+
+  // Surface warmth & thermometer:
+  //   Permian equilibrium = 0.0  (thermometer = 0.42)
+  //   Volcanic winter dip = -0.42 (thermometer dips to ~0.16 cyan!)
+  //   Super-greenhouse    = +1.00 (thermometer surges to ~0.97 blazing red!)
+  const dip = -0.45 * smoothstep(0.24, 0.35, p) * (1.0 - smoothstep(0.42, 0.52, p));
+  const heat = smoothstep(0.45, 0.88, p);
+  const warmth = dip + heat;
+
+  const tempNorm = clamp(0.42 + dip * 0.58 + heat * 0.56, 0.08, 0.98);
+
+  let phaseIdx = 0;
+  let phaseLabel = '1 · Late Permian Equilibrium — Sunrays & Heat Balanced';
+  let phaseColor = '#38d996';
+  if (p >= 0.74) {
+    phaseIdx = 3;
+    phaseLabel = '4 · Super-Greenhouse Mass Extinction (+10 °C)';
+    phaseColor = '#ff3b24';
+  } else if (p >= 0.44) {
+    phaseIdx = 2;
+    phaseLabel = '3 · CO₂ Greenhouse Blanket — Outgoing Heat Trapped';
+    phaseColor = '#ff922b';
+  } else if (p >= 0.20) {
+    phaseIdx = 1;
+    phaseLabel = '2 · Siberian Traps Eruption — Ash Dims Sunlight';
+    phaseColor = '#4dc6ff';
+  }
+
+  return { erupt, ash, greenhouse, warmth, tempNorm, phaseIdx, phaseLabel, phaseColor };
+}
+
+/* ============================================================================
+ * Populate 3D Sunrays, Ash Deflections, Escaping & Bouncing Trapped Heat Rays!
+ * ========================================================================== */
+const R_GLOBE = 1.0;
+const R_ATMO  = 1.28;
+// Radiant Sun positioned cleanly inside upper-right corner of the 720x720 square frame!
+const SUN_POS = [1.26, 1.12, 0.30];
+const SUN_DIR = vNorm(SUN_POS);
+
+function buildDynamicEffects(st, timeSec, globeModelM, eyePos) {
+  rayCount = 0;
+  partCount = 0;
+
+  // ---- 1. Radiant Sun Orb & Solar Corona (Clearly Visible in Upper-Right Corner!) ----
+  const sunPulse = 1.0 + 0.06 * Math.sin(timeSec * 3.2);
+  pushPart(SUN_POS[0], SUN_POS[1], SUN_POS[2], 0.72 * sunPulse, 1.0, 0.66, 0.16, 0.44, 0);
+  pushPart(SUN_POS[0], SUN_POS[1], SUN_POS[2], 0.40 * sunPulse, 1.0, 0.86, 0.42, 0.88, 0);
+  pushPart(SUN_POS[0], SUN_POS[1], SUN_POS[2], 0.21 * sunPulse, 1.0, 0.99, 0.86, 1.00, 0);
+
+  // ---- 2. Incoming Straight Golden Sunrays (5 crisp parallel beams fanning smoothly from Sun!) ----
+  const sunRight = vNorm(vCross([0, 1, 0], SUN_DIR));
+  const sunUp = vNorm(vCross(SUN_DIR, sunRight));
+  const rayOffsets = [
+    [-0.08,  0.46],
+    [ 0.08,  0.22],
+    [-0.12,  0.00],
+    [ 0.10, -0.22],
+    [-0.04, -0.44],
+  ];
+
+  for (let i = 0; i < rayOffsets.length; i++) {
+    const [ox, oy] = rayOffsets[i];
+    const perp = vAdd(vScale(sunRight, ox), vScale(sunUp, oy));
+    const pStart = vAdd(SUN_POS, vScale(perp, 0.24));
+
+    const r2 = ox * ox + oy * oy;
+    const zAtmo = Math.sqrt(Math.max(0.01, R_ATMO * R_ATMO - r2));
+    const zSurf = Math.sqrt(Math.max(0.01, R_GLOBE * R_GLOBE - r2));
+    const pAtmoHit = vAdd(perp, vScale(SUN_DIR, zAtmo));
+    const pSurfHit = vAdd(perp, vScale(SUN_DIR, zSurf + 0.01));
+
+    const cycle = (timeSec * 0.72 + i * 0.21) % 1.0;
+    const ashBlock = smoothstep(0.15, 0.85, st.ash);
+    const pEnd = [
+      lerp(pSurfHit[0], pAtmoHit[0], ashBlock),
+      lerp(pSurfHit[1], pAtmoHit[1], ashBlock),
+      lerp(pSurfHit[2], pAtmoHit[2], ashBlock),
+    ];
+
+    const segs = 14;
+    const pts = [], wids = [], cols = [];
+    const alphaBase = lerp(0.90, 0.56, ashBlock);
+    for (let s = 0; s <= segs; s++) {
+      const f = s / segs;
+      pts.push([
+        lerp(pStart[0], pEnd[0], f),
+        lerp(pStart[1], pEnd[1], f),
+        lerp(pStart[2], pEnd[2], f),
+      ]);
+      const pulse = Math.exp(-Math.pow((f - cycle) / 0.16, 2));
+      const endFade = smoothstep(0.0, 0.14, f);
+      wids.push(0.018 + 0.010 * pulse);
+      cols.push([
+        1.0,
+        lerp(0.84, 0.96, pulse),
+        lerp(0.28, 0.72, pulse),
+        endFade * (alphaBase * (0.58 + 0.42 * pulse)),
+      ]);
+    }
+    addArrowRibbon(pts, wids, cols, eyePos, 0.090, 0.048);
+
+    // Deflected / scattered sunlight bouncing AWAY off the volcanic ash shroud!
+    if (ashBlock > 0.08) {
+      const nHit = vNorm(pAtmoHit);
+      const inDir = vNorm(vSub(pAtmoHit, pStart));
+      const dotIN = vDot(inDir, nHit);
+      const refl = vNorm(vSub(inDir, vScale(nHit, 2.0 * dotIN)));
+      const defLen = 0.36 * ashBlock;
+      const dPts = [], dWids = [], dCols = [];
+      for (let s = 0; s <= 7; s++) {
+        const f = s / 7;
+        dPts.push(vAdd(pAtmoHit, vScale(refl, f * defLen)));
+        dWids.push(0.016 * (1.0 - 0.3 * f));
+        const a = (1.0 - f * 0.72) * ashBlock * 0.88;
+        dCols.push([0.85, 0.84, 0.70, a]);
+      }
+      addArrowRibbon(dPts, dWids, dCols, eyePos, 0.072 * ashBlock, 0.038 * ashBlock);
+      addBounceRing(pAtmoHit, nHit, 0.050 + 0.025 * Math.sin(timeSec * 6.0 + i), 0.008, [0.85, 0.84, 0.70, 0.50 * ashBlock]);
+    }
+  }
+
+  // ---- 3. Outgoing Infrared Heat Waves Arranged Cleanly Around the Globe Limb! ----
+  //    Every single ray displays an unmistakable profile silhouette (escaping freely in Phase 1 ->
+  //    ricocheting sharply off the glowing CO2 shell back onto Earth in Phases 3 & 4!),
+  //    never colliding with the upper-right Sun cone or left thermometer!
+  const heatSpecs = [
+    // [limb_angle_deg_from_right_CCW, z_bias, hop_sign]
+    [ 92, 0.22, -1],   // Top
+    [138, 0.24, -1],   // Upper-left
+    [214, 0.24,  1],   // Lower-left
+    [264, 0.24,  1],   // Bottom
+    [310, 0.24,  1],   // Lower-right
+    [352, 0.24, -1],   // Right-equator (below sunbeams)
+  ];
+
+  const trapFactor = smoothstep(0.18, 0.82, st.greenhouse);
+  const heatVisibility = clamp(1.0 - st.ash * 0.72 + st.greenhouse * 0.9, 0.25, 1.0);
+
+  for (let i = 0; i < heatSpecs.length; i++) {
+    const [angDeg, zB, hopSgn] = heatSpecs[i];
+    const rad = angDeg * Math.PI / 180;
+    const dir = vNorm([Math.cos(rad), Math.sin(rad), zB]);
+    // Pure in-plane limb tangent perpendicular to radial direction so V-bounce reads razor-sharp!
+    const limbTan = vNorm([-Math.sin(rad), Math.cos(rad), 0.0]);
+    const waveAxis = vNorm(vCross(dir, limbTan));
+    const phase = (timeSec * (0.58 + 0.22 * trapFactor) + i * 0.17) % 1.0;
+
+    // A) ESCAPING HEAT WAVES (Phase 1 Healthy Permian: rises freely right past the blue atmosphere!)
+    const escapeAlpha = (1.0 - trapFactor * 0.92) * heatVisibility;
+    if (escapeAlpha > 0.04) {
+      const r0 = R_GLOBE + 0.02 + phase * 0.16;
+      const r1 = r0 + 0.48;
+      const pts = [], wids = [], cols = [];
+      const segs = 16;
+      for (let s = 0; s <= segs; s++) {
+        const f = s / segs;
+        const r = lerp(r0, r1, f);
+        const wave = Math.sin(f * Math.PI * 5.0 - timeSec * 7.0 + i) * 0.028;
+        pts.push(vAdd(vScale(dir, r), vScale(limbTan, wave)));
+        wids.push(0.015 * (1.0 - 0.15 * f));
+        const a = smoothstep(0.0, 0.18, f) * (1.0 - smoothstep(0.72, 1.0, f)) * escapeAlpha * 0.92;
+        cols.push([1.0, 0.56, 0.18, a]);
+      }
+      addArrowRibbon(pts, wids, cols, eyePos, 0.082, 0.042);
+    }
+
+    // B) TRAPPED BOUNCING GREENHOUSE HEAT WAVES (Phases 3 & 4: unmistakable V-ricochet inside CO2 shell!)
+    if (trapFactor > 0.05) {
+      const hopDir = vScale(limbTan, hopSgn);
+      const pLaunch = vNorm(vAdd(dir, vScale(hopDir, -0.24)));
+      const pApex   = vScale(dir, R_ATMO - 0.012);
+      const pReturn = vNorm(vAdd(dir, vScale(hopDir,  0.24)));
+
+      const pStart = vScale(pLaunch, R_GLOBE + 0.012);
+      const pLand  = vScale(pReturn, R_GLOBE + 0.012);
+
+      const segs = 22;
+      const pts = [], wids = [], cols = [];
+      for (let s = 0; s <= segs; s++) {
+        const f = s / segs;
+        const u = f <= 0.5 ? f * 2.0 : (f - 0.5) * 2.0;
+        const aP = f <= 0.5 ? pStart : pApex;
+        const bP = f <= 0.5 ? pApex  : pLand;
+        const baseP = [lerp(aP[0], bP[0], u), lerp(aP[1], bP[1], u), lerp(aP[2], bP[2], u)];
+
+        const waveAmp = 0.018 * Math.sin(f * Math.PI);
+        const wave = Math.sin(f * Math.PI * 7.0 - timeSec * 10.0 + i * 2.0) * waveAmp;
+        pts.push(vAdd(baseP, vScale(waveAxis, wave)));
+
+        const pulse = Math.exp(-Math.pow((f - phase) / 0.22, 2));
+        wids.push(0.016 + 0.012 * pulse);
+        const gC = f < 0.5 ? lerp(0.45, 0.22, st.warmth) : lerp(0.18, 0.07, st.warmth);
+        const a = trapFactor * (0.55 + 0.45 * pulse) * smoothstep(0.0, 0.08, f);
+        cols.push([1.0, gC, 0.06, a]);
+      }
+      addArrowRibbon(pts, wids, cols, eyePos, 0.095, 0.052);
+
+      // Luminous thermal bounce-ring ripple right on the inner CO2 blanket!
+      const ringAge = clamp((phase - 0.42) / 0.35, 0, 1);
+      if (ringAge > 0 && ringAge < 1) {
+        const rRad = 0.03 + ringAge * 0.13;
+        const rAlpha = Math.sin(ringAge * Math.PI) * trapFactor * 0.90;
+        addBounceRing(pApex, dir, rRad, 0.010, [1.0, 0.46, 0.12, rAlpha]);
+      }
+    }
+  }
+
+  // ---- 4. 3D Volcanic Eruption Columns, Ash Plumes & Glowing Magma Sparks! ----
+  if (st.erupt > 0.02) {
+    // Rotate local Siberian vent positions by globeModelM into world space
+    const xfPoint = (v) => [
+      globeModelM[0]*v[0] + globeModelM[4]*v[1] + globeModelM[8]*v[2],
+      globeModelM[1]*v[0] + globeModelM[5]*v[1] + globeModelM[9]*v[2],
+      globeModelM[2]*v[0] + globeModelM[6]*v[1] + globeModelM[10]*v[2],
+    ];
+
+    for (let i = 0; i < PLUME_SEEDS.length; i++) {
+      const s = PLUME_SEEDS[i];
+      const ventW = vNorm(xfPoint(VOLCANO_VENTS[s.vent]));
+      const ref = Math.abs(ventW[1]) < 0.88 ? [0, 1, 0] : [1, 0, 0];
+      const t1 = vNorm(vCross(ventW, ref));
+      const t2 = vNorm(vCross(ventW, t1));
+
+      const age = (timeSec * s.speed + s.phase) % 1.0;
+      const alt = s.isSpark
+        ? (0.01 + 0.34 * age - 0.24 * age * age) // ballistic magma spark arc!
+        : (0.01 + 0.30 * Math.pow(age, 0.78));   // billowing mushroom ash column!
+      const radial = s.spreadR * Math.pow(age, 0.85);
+      // Slight atmospheric trade-wind shear as plume reaches stratosphere
+      const drift = vAdd(vScale(t1, Math.cos(s.spreadA) * radial + age * 0.14), vScale(t2, Math.sin(s.spreadA) * radial));
+      const p = vAdd(vScale(ventW, R_GLOBE + alt), drift);
+
+      const env = Math.sin(age * Math.PI) * st.erupt;
+      if (s.isSpark) {
+        // Blazing incandescent volcanic sparks & magma embers!
+        pushPart(p[0], p[1], p[2], s.size * (1.1 - 0.5 * age), 1.0, lerp(0.75, 0.22, age), 0.08, env * 0.95, 0);
+      } else {
+        // Billowy volcanic plume: fiery magma glow near crater -> thick charcoal ash cloud higher up!
+        const hot = Math.max(0, 1.0 - age * 2.6);
+        const r = lerp(0.18, 1.00, hot);
+        const g = lerp(0.16, 0.42, hot);
+        const b = lerp(0.16, 0.10, hot);
+        const a = env * (0.45 + 0.35 * st.ash);
+        pushPart(p[0], p[1], p[2], s.size * (0.65 + 0.95 * age), r, g, b, a, hot > 0.35 ? 0 : 1);
+      }
+    }
+  }
+}
+
+/* ============================================================================
+ * Interactive Camera & App State
+ * ========================================================================== */
+const cam = { yaw: 0.0, pitch: 0.20, dist: 4.85, target: [-0.04, 0.02, 0.0] };
+let drag = false, lastX = 0, lastY = 0;
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  drag = true; lastX = e.clientX; lastY = e.clientY;
+});
+canvas.addEventListener('pointermove', e => {
+  if (!drag) return;
+  cam.yaw -= (e.clientX - lastX) * 0.007;
+  cam.pitch = clamp(cam.pitch + (e.clientY - lastY) * 0.006, -1.1, 1.1);
+  lastX = e.clientX; lastY = e.clientY;
+});
+canvas.addEventListener('pointerup', () => { drag = false; });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  cam.dist = clamp(cam.dist * (1 + e.deltaY * 0.001), 2.3, 7.5);
+}, { passive: false });
+
+const DURATION = 16.0;
+const app = {
+  playing: true,
+  progress: 0.0,       // 0..1 across the 4-phase extinction story
+  elapsed: 0.0,        // continuous clock for ray flow & plume particles
+  spin72: false,       // exact 72 deg/s Holo Stage turntable speed
+  globeAngleDeg: -18,  // starts facing Pangaea + Siberian Traps clearly!
+  bg: 'holo',          // 'holo' | 'museum'
+  showThermo: true,
+  headless: false,
+};
+
+function renderScene(width, height, opts = {}) {
+  const st = opts.stateOverride || evalExtinctionPhase(app.progress);
+  const tFlow = opts.flowTime != null ? opts.flowTime : app.elapsed;
+  const spinDeg = opts.globeAngleDeg != null ? opts.globeAngleDeg : app.globeAngleDeg;
+
+  gl.viewport(0, 0, width, height);
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  // 1. Background pass
+  gl.disable(gl.DEPTH_TEST);
+  gl.disable(gl.BLEND);
+  gl.useProgram(progBg);
+  gl.uniform1f(gl.getUniformLocation(progBg, 'uMuseum'), app.bg === 'museum' ? 1.0 : 0.0);
+  gl.uniform1f(gl.getUniformLocation(progBg, 'uTime'), tFlow);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  // Camera setup
+  const aspect = width / Math.max(1, height);
+  const proj = M4.perspective(38 * Math.PI / 180, aspect, 0.1, 40.0);
+  const eye = [
+    cam.target[0] + cam.dist * Math.cos(cam.pitch) * Math.sin(cam.yaw),
+    cam.target[1] + cam.dist * Math.sin(cam.pitch),
+    cam.target[2] + cam.dist * Math.cos(cam.pitch) * Math.cos(cam.yaw),
+  ];
+  const view = M4.lookAt(eye, cam.target, [0, 1, 0]);
+  const viewProj = M4.mul(proj, view);
+
+  // Earth axial tilt (~21 deg) + smooth rotation
+  const globeModel = M4.mul(M4.rotZ(-0.22), M4.rotY(spinDeg * Math.PI / 180));
+  const atmoModel  = M4.mul(globeModel, M4.scale(R_ATMO, R_ATMO, R_ATMO));
+
+  // 2. Opaque 3D Pangaea Globe
+  gl.enable(gl.DEPTH_TEST);
+  gl.depthMask(true);
+  gl.enable(gl.CULL_FACE);
+  gl.cullFace(gl.BACK);
+  gl.useProgram(progGlobe);
+  gl.bindVertexArray(sphereMesh.vao);
+  gl.uniformMatrix4fv(gl.getUniformLocation(progGlobe, 'uViewProj'), false, viewProj);
+  gl.uniformMatrix4fv(gl.getUniformLocation(progGlobe, 'uModel'), false, globeModel);
+  gl.uniform3fv(gl.getUniformLocation(progGlobe, 'uCamPos'), eye);
+  gl.uniform3fv(gl.getUniformLocation(progGlobe, 'uSunDir'), SUN_DIR);
+  gl.uniform1f(gl.getUniformLocation(progGlobe, 'uTime'), tFlow);
+  gl.uniform1f(gl.getUniformLocation(progGlobe, 'uErupt'), st.erupt);
+  gl.uniform1f(gl.getUniformLocation(progGlobe, 'uAsh'), st.ash);
+  gl.uniform1f(gl.getUniformLocation(progGlobe, 'uGreenhouse'), st.greenhouse);
+  gl.uniform1f(gl.getUniformLocation(progGlobe, 'uWarmth'), st.warmth);
+  gl.drawElements(gl.TRIANGLES, sphereMesh.count, gl.UNSIGNED_INT, 0);
+
+  // Build all dynamic rays, heat bounce rings & eruption/sun particles
+  buildDynamicEffects(st, tFlow, globeModel, eye);
+
+  // 3. Translucent Outer Atmosphere / Ash Veil / CO2 Greenhouse Shell
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.depthMask(false);
+  gl.useProgram(progAtmo);
+  gl.bindVertexArray(sphereMesh.vao);
+  gl.uniformMatrix4fv(gl.getUniformLocation(progAtmo, 'uViewProj'), false, viewProj);
+  gl.uniformMatrix4fv(gl.getUniformLocation(progAtmo, 'uModel'), false, atmoModel);
+  gl.uniform3fv(gl.getUniformLocation(progAtmo, 'uCamPos'), eye);
+  gl.uniform3fv(gl.getUniformLocation(progAtmo, 'uSunDir'), SUN_DIR);
+  gl.uniform1f(gl.getUniformLocation(progAtmo, 'uTime'), tFlow);
+  gl.uniform1f(gl.getUniformLocation(progAtmo, 'uAsh'), st.ash);
+  gl.uniform1f(gl.getUniformLocation(progAtmo, 'uGreenhouse'), st.greenhouse);
+  gl.uniform1f(gl.getUniformLocation(progAtmo, 'uWarmth'), st.warmth);
+  gl.drawElements(gl.TRIANGLES, sphereMesh.count, gl.UNSIGNED_INT, 0);
+
+  // 4. Volcanic Plumes, Magma Sparks & Solar Corona Particles
+  if (partCount > 0) {
+    gl.useProgram(progPart);
+    gl.bindVertexArray(partVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, pBuf0);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, partPosSize.subarray(0, partCount * 4));
+    gl.bindBuffer(gl.ARRAY_BUFFER, pBuf1);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, partCol.subarray(0, partCount * 4));
+    gl.bindBuffer(gl.ARRAY_BUFFER, pBuf2);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, partKind.subarray(0, partCount));
+    gl.uniformMatrix4fv(gl.getUniformLocation(progPart, 'uViewProj'), false, viewProj);
+    gl.uniform1f(gl.getUniformLocation(progPart, 'uScalePx'), height * 0.92);
+    gl.drawArrays(gl.POINTS, 0, partCount);
+  }
+
+  // 5. Luminous 3D Sunrays, Ash Deflections & Trapped Bouncing Infrared Heat Arrows!
+  if (rayCount > 0) {
+    gl.disable(gl.CULL_FACE);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE); // luminous additive glow on black hologram glass!
+    gl.useProgram(progRay);
+    gl.bindVertexArray(rayVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, rayPosBuf);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, rayPos.subarray(0, rayCount * 3));
+    gl.bindBuffer(gl.ARRAY_BUFFER, rayColBuf);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, rayCol.subarray(0, rayCount * 4));
+    gl.bindBuffer(gl.ARRAY_BUFFER, rayUvBuf);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, rayUv.subarray(0, rayCount * 2));
+    gl.uniformMatrix4fv(gl.getUniformLocation(progRay, 'uViewProj'), false, viewProj);
+    gl.uniform1f(gl.getUniformLocation(progRay, 'uTime'), tFlow);
+    gl.drawArrays(gl.TRIANGLES, 0, rayCount);
+  }
+
+  // 6. Language-Neutral Glowing Thermometer Overlay (Always Sharp & Unclipped!)
+  gl.disable(gl.DEPTH_TEST);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(progThermo);
+  gl.uniform1f(gl.getUniformLocation(progThermo, 'uAspect'), aspect);
+  gl.uniform1f(gl.getUniformLocation(progThermo, 'uTemp'), st.tempNorm);
+  gl.uniform1f(gl.getUniformLocation(progThermo, 'uTime'), tFlow);
+  gl.uniform1f(gl.getUniformLocation(progThermo, 'uShow'), app.showThermo ? 1.0 : 0.0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  gl.depthMask(true);
+  gl.disable(gl.BLEND);
+}
+
+/* ============================================================================
+ * Interactive UI & Main Loop
+ * ========================================================================== */
+function syncHud() {
+  const st = evalExtinctionPhase(app.progress);
+  document.getElementById('phaseName').textContent = st.phaseLabel;
+  const dot = document.getElementById('phaseDot');
+  dot.style.background = st.phaseColor;
+  dot.style.color = st.phaseColor;
+  document.getElementById('rngTime').value = app.progress.toFixed(3);
+  document.getElementById('lblTime').textContent = `${(app.progress * DURATION).toFixed(1)}s`;
+  document.querySelectorAll('[data-phase]').forEach((b, idx) => b.classList.toggle('active', idx === st.phaseIdx));
+}
+
+function resizeCanvas() {
+  if (app.headless) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.floor(window.innerWidth * dpr);
+  const h = Math.floor(window.innerHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+}
+window.addEventListener('resize', resizeCanvas);
+
+let prevTs = performance.now();
+function loop(ts) {
+  requestAnimationFrame(loop);
+  if (app.headless) return;
+  const dt = Math.min(0.05, (ts - prevTs) / 1000);
+  prevTs = ts;
+  resizeCanvas();
+  if (app.playing) {
+    app.elapsed += dt;
+    app.progress = (app.progress + dt / DURATION) % 1.0;
+    app.globeAngleDeg = (app.globeAngleDeg + dt * (app.spin72 ? 72.0 : 18.0)) % 360.0;
+    syncHud();
+  }
+  renderScene(canvas.width, canvas.height);
+}
+
+document.getElementById('btnPlay').onclick = () => {
+  app.playing = !app.playing;
+  document.getElementById('btnPlay').textContent = app.playing ? 'Pause' : 'Play';
+};
+document.getElementById('btnRestart').onclick = () => {
+  app.progress = 0; app.globeAngleDeg = -18; app.playing = true;
+  document.getElementById('btnPlay').textContent = 'Pause';
+  syncHud();
+};
+document.querySelectorAll('[data-phase]').forEach(btn => {
+  btn.onclick = () => {
+    app.progress = parseFloat(btn.dataset.phase);
+    syncHud();
+  };
+});
+document.getElementById('btnTurn').onclick = (e) => {
+  app.spin72 = !app.spin72;
+  e.currentTarget.classList.toggle('active', app.spin72);
+};
+document.getElementById('selBg').onchange = (e) => { app.bg = e.target.value; };
+document.getElementById('rngTime').oninput = (e) => {
+  app.playing = false;
+  document.getElementById('btnPlay').textContent = 'Play';
+  app.progress = parseFloat(e.target.value);
+  syncHud();
+};
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); document.getElementById('btnPlay').click(); }
+  else if (e.code === 'KeyH') document.body.classList.toggle('hud-hidden');
+  else if (e.key >= '1' && e.key <= '4') {
+    const stops = [0.06, 0.33, 0.62, 0.90];
+    app.progress = stops[parseInt(e.key, 10) - 1];
+    syncHud();
+  }
+});
+
+/* ============================================================================
+ * Deterministic Headless Render API (for Holo Stage MP4 & Inspection Sheets)
+ * ========================================================================== */
+window.__RENDER_API__ = {
+  renderFrame(opts) {
+    app.headless = true;
+    const w = opts.width || 900;
+    const h = opts.height || 900;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w; canvas.height = h;
+      canvas.style.width = `${w}px`; canvas.style.height = `${h}px`;
+    }
+    if (opts.hideHud !== false) document.body.classList.add('hud-hidden');
+    else document.body.classList.remove('hud-hidden');
+    if (opts.bg) app.bg = opts.bg;
+    if (opts.cam) Object.assign(cam, opts.cam);
+    if (opts.progress != null) app.progress = opts.progress;
+    if (opts.showThermo != null) app.showThermo = opts.showThermo;
+    syncHud();
+    renderScene(w, h, {
+      flowTime: opts.flowTime != null ? opts.flowTime : 0.0,
+      globeAngleDeg: opts.globeAngleDeg != null ? opts.globeAngleDeg : -18.0,
+      stateOverride: opts.stateOverride || null,
+    });
+    gl.finish();
+    return true;
+  },
+  getDataURL() { return canvas.toDataURL('image/png'); },
+};
+
+syncHud();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

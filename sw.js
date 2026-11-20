@@ -1,5 +1,5 @@
 // App-shell cache so the stage works offline. Videos live in IndexedDB, not here.
-const CACHE = 'holo-stage-v15';
+const CACHE = 'holo-stage-v16';
 const SHELL = ['./', 'index.html', 'style.css', 'i18n.js', 'app.js', 'story.js', 'ui.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {

@@ -927,24 +927,144 @@ const layoutSyncs = [
 ];
 
 /* ---------------------------------------------------------------- first-run tutorial */
-// A card at the bottom of the setup panel walks through it step by step; each step opens
-// its tab and highlights the part it talks about. Texts live in i18n.js as tour_<key>_t / _b.
+// A card walks through the setup panel step by step. Each step opens its tab, puts a
+// spotlight on the part it explains (the rest of the panel dims) and pins numbered badges
+// on the exact controls; the card text uses the same numbers. Some steps add a small
+// diagram for things that are hard to say in words. Texts: i18n.js tour_<key>_t / _b, art_*.
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const TOUR = [
-  { key: 'welcome', tab: 'story' },
-  { key: 'pyramid', tab: 'setup', target: () => $('#buildSection') },
-  { key: 'align', tab: 'setup', target: () => $('#lGuides').closest('.grid') },
-  { key: 'videos', tab: 'videos', target: () => $('#fileInput').closest('.row') },
+  { key: 'welcome', tab: 'story', art: 'welcome' },
+  { key: 'pyramid', tab: 'setup', art: 'pyramid', target: () => $('#buildSection'),
+    marks: () => [$('#bDiag').closest('.grid'), $('#btnPrintTemplate'), $('#bGuide > summary')] },
+  { key: 'align', tab: 'setup', art: 'align', target: () => $('#lGuides').closest('.grid'),
+    marks: () => [$('#lGuides').closest('label'), $('#lTile').closest('label'), $('#lHole').closest('label')] },
+  { key: 'videos', tab: 'videos', art: 'videos', target: () => $('#fileInput').closest('.row'),
+    marks: () => [$('#fileInput').closest('label'), $('#tab-videos [data-demo]')] },
   { key: 'library', tab: 'videos', target: () => $('#library') },
-  { key: 'start', tab: 'story', target: () => $('#storyMeta') },
-  { key: 'scenes', tab: 'story', target: () => $('.add-scene') },
-  { key: 'edit', tab: 'story', target: () => (state.story.scenes.length ? $('#scenes') : $('.add-scene')) },
-  { key: 'buttons', tab: 'buttons', target: () => $('#players') },
-  { key: 'play', tab: 'story', target: () => $('#btnFullscreen') },
-  { key: 'done', tab: 'setup', target: () => $('#backupRow') },
+  { key: 'start', tab: 'story', art: 'start', target: () => $('#storyMeta'),
+    marks: () => [$('#storyMeta .seg'), $('#sTitle').closest('label'), $('#sAttract').closest('label')] },
+  { key: 'scenes', tab: 'story', art: 'scenes', target: () => $('.add-scene'),
+    marks: () => ['chapter', 'together', 'quiz', 'turns'].map(k => $(`.add-scene .add-${k}`)) },
+  { key: 'edit', tab: 'story',
+    target: () => (state.story.scenes.length ? $('#scenes') : $('#storyEmpty')),
+    marks: () => [state.story.scenes.length ? $('#scenes .scene-head') : $('#storyEmpty [data-demo]')] },
+  { key: 'buttons', tab: 'buttons', art: 'buttons', target: () => $('#players .player'),
+    marks: () => ['.p-color', '.p-learn', '.p-test'].map(s => $(`#players .player ${s}`)) },
+  { key: 'play', tab: 'story', art: 'play', target: () => $('#btnFullscreen'), marks: () => [$('#btnFullscreen')] },
+  { key: 'done', tab: 'setup', target: () => $('#backupRow'),
+    marks: () => [$('#btnExport'), $('#importInput').closest('label'), $('#btnTour')] },
 ];
+
+/* diagrams: inline SVG, colors from CSS classes so they follow the panel theme */
+// a small volcano, drawn with plain coordinates (rot 180 = upside down)
+const volcano = (x, y, s = 1, extra = '', rot = 0) => {
+  const k = rot === 180 ? -s : s;
+  const P = (px, py) => `${(x + px * k).toFixed(1)} ${(y + py * k).toFixed(1)}`;
+  return `<g ${extra}><path class="a-lava" d="M${P(-18, 14)} L${P(-5, -8)} L${P(5, -8)} L${P(18, 14)} Z"/>`
+    + `<path class="a-smoke" d="M${P(0, -10)} Q${P(4, -16)} ${P(-1, -22)} Q${P(-5, -28)} ${P(1, -33)}"/></g>`;
+};
+const TOUR_ART = {
+  welcome: () => `
+    <rect x="40" y="104" width="240" height="9" rx="3" class="a-device"/>
+    <rect x="90" y="100" width="44" height="4" class="a-glow"/><rect x="186" y="100" width="44" height="4" class="a-glow"/>
+    <path d="M112 100 V66 H38" class="a-ray"/><path d="M208 100 V66 H282" class="a-ray"/>
+    <path d="M140 104 L96 44" class="a-film"/><path d="M180 104 L224 44" class="a-film"/><path d="M96 44 H224" class="a-dash"/>
+    ${volcano(160, 82, 0.9, 'class="a-ghost"')}
+    <path d="M14 66 q10 -8 20 0 q-10 8 -20 0 Z M286 66 q10 -8 20 0 q-10 8 -20 0 Z" class="a-eye"/><circle cx="24" cy="66" r="2.6" class="a-pupil"/><circle cx="296" cy="66" r="2.6" class="a-pupil"/>
+    <text x="232" y="36" class="a-sig">${esc(t('art_film'))}</text>
+    <text x="160" y="40" text-anchor="middle" class="a-acc">${esc(t('art_ghost'))}</text>
+    <text x="160" y="126" text-anchor="middle" class="a-mut">${esc(t('art_screen'))}</text>
+    <text x="24" y="88" text-anchor="middle" class="a-mut">${esc(t('art_player'))}</text><text x="296" y="88" text-anchor="middle" class="a-mut">${esc(t('art_player'))}</text>`,
+  pyramid: () => `
+    <path d="M20 34 H130 L93 86 H57 Z" class="a-face"/>
+    <text x="75" y="27" text-anchor="middle" class="a-fg">${esc(t('art_long'))}</text>
+    <text x="75" y="102" text-anchor="middle" class="a-acc">${esc(t('art_short'))}</text>
+    <text x="75" y="116" text-anchor="middle" class="a-mut">${esc(t('art_shortSub'))}</text>
+    <text x="75" y="66" text-anchor="middle" class="a-big">×4</text>
+    <path d="M150 50 h24 m-7 -6 l7 6 -7 6" class="a-arrow"/>
+    <rect x="196" y="8" width="84" height="84" class="a-face"/><rect x="224" y="36" width="28" height="28" class="a-hole"/>
+    <path d="M196 8 L224 36" class="a-tape"/><path d="M280 8 L252 36" class="a-tape"/>
+    <path d="M196 92 L224 64" class="a-tape"/><path d="M280 92 L252 64" class="a-tape"/>
+    <text x="238" y="106" text-anchor="middle" class="a-mut">${esc(t('art_top'))}</text>
+    <path d="M200 120 h16" class="a-tape"/><text x="222" y="124" class="a-acc">${esc(t('art_tape'))}</text>`,
+  align: () => `
+    <rect x="8" y="4" width="184" height="122" rx="6" class="a-device"/>
+    <rect x="80.5" y="6" width="39" height="39" class="a-tile"/><rect x="80.5" y="85" width="39" height="39" class="a-tile"/>
+    <rect x="41.5" y="45.5" width="39" height="39" class="a-tile"/><rect x="119.5" y="45.5" width="39" height="39" class="a-tile"/>
+    <rect x="80.5" y="45.5" width="39" height="39" class="a-yel"/>
+    <rect x="41.5" y="6" width="117" height="118" class="a-pyr"/>
+    <path d="M41.5 6 L80.5 45.5 M158.5 6 L119.5 45.5 M41.5 124 L80.5 84.5 M158.5 124 L119.5 84.5" class="a-pyr"/>
+    <rect x="206" y="26" width="14" height="14" class="a-yel"/><text x="226" y="37" class="a-fg">${esc(t('art_yellowT'))}</text><text x="206" y="53" class="a-mut">${esc(t('art_yellow'))}</text>
+    <rect x="206" y="72" width="14" height="14" class="a-tile"/><text x="226" y="83" class="a-fg">${esc(t('art_blueT'))}</text><text x="206" y="99" class="a-mut">${esc(t('art_blue'))}</text>`,
+  videos: () => [
+    { x: 22, bg: 'a-thumb', ok: true, label: 'art_good', flip: false },
+    { x: 128, bg: 'a-thumb-light', ok: false, label: 'art_bright', flip: false },
+    { x: 234, bg: 'a-thumb', ok: false, label: 'art_turned', flip: true },
+  ].map(v => `
+    <rect x="${v.x}" y="6" width="64" height="64" rx="6" class="${v.bg}"/>
+    ${v.flip ? volcano(v.x + 32, 30, 1.1, '', 180) : volcano(v.x + 32, 52, 1.1)}
+    <path d="${v.ok ? `M${v.x + 24} 86 l6 6 l11 -12` : `M${v.x + 26} 80 l12 12 M${v.x + 38} 80 l-12 12`}" class="${v.ok ? 'a-ok' : 'a-bad'}"/>
+    <text x="${v.x + 32}" y="112" text-anchor="middle" class="a-mut">${esc(t(v.label))}</text>`).join(''),
+  start: () => `
+    <rect x="12" y="20" width="76" height="60" rx="8" class="a-box"/><use href="#i-restart" x="36" y="34" width="28" height="28" class="a-icon"/>
+    <path d="M98 50 h22 m-7 -6 l7 6 -7 6" class="a-arrow"/>
+    <circle cx="160" cy="50" r="24" class="a-btn" style="fill:${esc(state.players[0]?.color || '#ff7a1a')}"/><circle cx="160" cy="50" r="30" class="a-press"/>
+    <path d="M200 50 h22 m-7 -6 l7 6 -7 6" class="a-arrow"/>
+    <rect x="232" y="20" width="76" height="60" rx="8" class="a-box"/><use href="#i-film" x="256" y="34" width="28" height="28" class="a-icon"/>
+    <text x="50" y="102" text-anchor="middle" class="a-mut">${esc(t('art_loop'))}</text>
+    <text x="160" y="102" text-anchor="middle" class="a-mut">${esc(t('art_press'))}</text>
+    <text x="270" y="102" text-anchor="middle" class="a-mut">${esc(t('art_begin'))}</text>`,
+  scenes: () => Object.entries(SCENE_TYPES).map(([k, T], i) => {
+    const x = 6 + i * 79;
+    return `<rect x="${x}" y="22" width="70" height="52" rx="8" class="a-box"/>
+      <use href="#${T.icon}" x="${x + 23}" y="34" width="24" height="24" class="a-icon${k === 'chapter' ? '' : ' a-icon-acc'}"/>
+      <circle cx="${x + 4}" cy="22" r="9" class="a-badge"/><text x="${x + 4}" y="26" text-anchor="middle" class="a-badgetxt">${i + 1}</text>
+      ${i < 3 ? `<path d="M${x + 72} 48 h5" class="a-arrow"/>` : ''}
+      <text x="${x + 35}" y="94" text-anchor="middle" class="a-mut">${esc(t(T.labelKey))}</text>`;
+  }).join(''),
+  buttons: () => {
+    const pos = { bottom: [160, 112], top: [160, 14], left: [96, 63], right: [224, 63] };
+    return `<rect x="122" y="25" width="76" height="76" class="a-face"/><rect x="146" y="49" width="28" height="28" class="a-hole"/>
+      <path d="M122 25 L146 49 M198 25 L174 49 M122 101 L146 77 M198 101 L174 77" class="a-pyr"/>
+      ${state.players.map((p, i) => {
+        const [x, y] = pos[p.side] || pos.bottom;
+        const lx = p.side === 'left' ? x - 16 : p.side === 'right' ? x + 16 : x + 16;
+        const anchor = p.side === 'left' ? 'end' : 'start';
+        return `<circle cx="${x}" cy="${y}" r="9" class="a-btn" style="fill:${esc(p.color)}"/>
+          <text x="${lx}" y="${y + 4}" text-anchor="${anchor}" class="a-fg">${esc(displayPlayerName(p, i))}</text>`;
+      }).join('')}`;
+  },
+  play: () => `
+    <rect x="60" y="8" width="200" height="112" rx="8" class="a-device"/>
+    <circle cx="78" cy="26" r="12" class="a-press"/><circle cx="78" cy="26" r="4" class="a-tap"/>
+    <rect x="96" y="14" width="118" height="24" rx="12" class="a-box"/>
+    ${['i-restart', 'i-prev', 'i-pause', 'i-next'].map((ic, i) => `<use href="#${ic}" x="${104 + i * 27}" y="18" width="16" height="16" class="a-icon"/>`).join('')}
+    <text x="160" y="70" text-anchor="middle" class="a-fg">${esc(t('art_tap'))}</text>
+    <text x="160" y="92" text-anchor="middle" class="a-mut">${esc(t('art_f1'))}</text>`,
+};
+
 const tourEl = $('#tour');
-let tourStep = -1;
+let tourStep = -1, tourMarks = [], tourRaf = 0;
 const tourOpen = () => tourStep >= 0;
+
+function clearTourHighlights() {
+  $$('.tour-target').forEach(el => el.classList.remove('tour-target'));
+  $$('.tour-badge').forEach(el => el.remove());
+  panel.classList.remove('tour-head-target', 'tour-has-target');
+  tourMarks = [];
+}
+// badges live inside the scrolling panel (or the sticky header), so they scroll with their control
+function placeTourMarks() {
+  for (const { el, badge } of tourMarks) {
+    const box = badge.parentElement;
+    if (!el.isConnected || !el.getClientRects().length) { badge.hidden = true; continue; }
+    const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+    badge.hidden = false;
+    badge.style.left = `${Math.max(2, r.left - b.left - 9)}px`;
+    badge.style.top = `${r.top - b.top + box.scrollTop - 9}px`;
+  }
+  tourRaf = tourOpen() ? requestAnimationFrame(placeTourMarks) : 0;
+}
 
 function renderTour() {
   if (!tourOpen()) return;
@@ -953,20 +1073,35 @@ function renderTour() {
   if (tab && tab.getAttribute('aria-selected') !== 'true') selectTab(tab);
   $('#tourCount').textContent = t('tourCount', { n: tourStep + 1, total: TOUR.length });
   $('#tourTitle').textContent = t(`tour_${step.key}_t`);
+  const art = step.art && TOUR_ART[step.art];
+  $('#tourArt').hidden = !art;
+  $('#tourArt').innerHTML = art ? `<svg viewBox="0 0 320 130" class="tour-art" role="img" aria-label="${esc(t(`tour_${step.key}_t`))}">${art()}</svg>` : '';
   $('#tourBody').innerHTML = t(`tour_${step.key}_b`);
   $('#tourDots').innerHTML = TOUR.map((_, i) => `<span class="${i === tourStep ? 'on' : i < tourStep ? 'past' : ''}"></span>`).join('');
   $('#tourBack').disabled = tourStep === 0;
   $('#tourNext').textContent = t(tourStep === TOUR.length - 1 ? 'tourDone' : tourStep === 0 ? 'tourStart' : 'tourNext');
   $('#tourSkip').hidden = tourStep === TOUR.length - 1;
-  panel.querySelectorAll('.tour-target').forEach(el => el.classList.remove('tour-target'));
+
+  clearTourHighlights();
   const target = step.target?.();
   if (target) {
     target.classList.add('tour-target');
-    if (!target.closest('.panel-head')) {
+    const inHead = !!target.closest('.panel-head');
+    panel.classList.add('tour-has-target');
+    panel.classList.toggle('tour-head-target', inHead);
+    if (!inHead) {
       const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
       requestAnimationFrame(() => target.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' }));
     }
   } else panel.scrollTop = 0;
+  (step.marks?.() || []).forEach((el, i) => {
+    if (!el) return;
+    const badge = Object.assign(document.createElement('span'), { className: 'tour-badge', textContent: i + 1 });
+    badge.setAttribute('aria-hidden', 'true');
+    (el.closest('.panel-head') || panel).append(badge);
+    tourMarks.push({ el, badge });
+  });
+  if (!tourRaf) placeTourMarks();
 }
 function startTour(at = 0) {
   if (panel.hidden) togglePanel(true);
@@ -981,7 +1116,8 @@ function endTour() {
   tourStep = -1;
   tourEl.hidden = true;
   document.body.classList.remove('touring');
-  panel.querySelectorAll('.tour-target').forEach(el => el.classList.remove('tour-target'));
+  clearTourHighlights();
+  cancelAnimationFrame(tourRaf); tourRaf = 0;
   DB.set('tourSeen', true).catch(() => {});
 }
 $('#tourNext').onclick = () => {
