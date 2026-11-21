@@ -75,6 +75,7 @@
         <button role="tab" id="tab-btn-videos" data-tab="videos" aria-controls="tab-videos" aria-selected="false" tabindex="-1" data-i18n="tabVideos">Videos</button>
         <button role="tab" id="tab-btn-setup" data-tab="setup" aria-controls="tab-setup" aria-selected="false" tabindex="-1" data-i18n="tabSetup">Pyramid</button>
       </nav>
+      <div id="clipShelf" class="clip-shelf" hidden></div>
     </header>
 
     <!-- ------------------------------------------------------------ Story -->
@@ -96,7 +97,7 @@
         <p class="hint" id="modeHint"></p>
         <div class="grid">
           <label><span data-i18n="storyTitle">Story title</span> <input id="sTitle" placeholder="Shown on the start screen" data-i18n-placeholder="storyTitlePlaceholder"></label>
-          <label><span data-i18n="attractClip">Start screen clip</span> <select id="sAttract"></select></label>
+          <label><span data-i18n="attractClip">Start screen clip</span> <select id="sAttract" data-clip-slot></select></label>
         </div>
       </div>
 
@@ -298,7 +299,7 @@
           <label><span data-i18n="textSize">Text size</span> <input class="p-lsize" type="range" min="0.03" max="0.2" step="0.005"></label>
         </div>
         <ol class="p-clips"></ol>
-        <select class="p-add" aria-label="Add a clip to this player" data-i18n-aria="addClipToPlayerAria"></select>
+        <select class="p-add" data-clip-slot aria-label="Add a clip to this player" data-i18n-aria="addClipToPlayerAria"></select>
       </details>
     </article>
   </template>

@@ -437,6 +437,34 @@ body.story-mode .player details.more { display: none; }
 .builtin-list button.is-added { color: var(--good); border-color: #24683b; opacity: .75; }
 .panel.dragover { outline: 3px dashed var(--accent); outline-offset: -6px; }
 
+/* ---------- dragging clips onto slots ---------- */
+.library li[draggable="true"] { cursor: grab; }
+.library li[draggable="true"] button, .library li[draggable="true"] input { cursor: pointer; }
+.clip-shelf {
+  display: flex; gap: 6px; align-items: center; overflow-x: auto; padding: 8px 0 10px;
+  scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
+}
+.clip-shelf[hidden] { display: none; }
+.clip-shelf .shelf-label { flex: none; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.chip {
+  flex: none; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12px; padding: 4px 10px; border-radius: 99px; cursor: grab; user-select: none;
+  background: var(--control); border: 1px solid var(--line-2); color: var(--panel-fg);
+}
+.chip:hover { border-color: var(--accent); }
+body.clip-dragging .panel select[data-clip-slot],
+body.clip-dragging .scene-head { outline: 1px dashed var(--line-2); outline-offset: 2px; }
+body.clip-dragging .drop-ok,
+body.clip-dragging .drop-ok select[data-clip-slot] { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scene-head.drop-ok, label.drop-ok, .answers-edit.drop-ok, details.more.drop-ok {
+  background: rgba(255, 122, 26, .10); border-radius: 8px;
+}
+/* tiles are edge-masked, so the highlight sits a little inside the edge */
+.tile.drop-ok::after {
+  content: ''; position: absolute; inset: 9%; pointer-events: none; border-radius: 8px;
+  border: 3px dashed var(--me, var(--accent)); background: rgba(255, 255, 255, .06);
+}
+
 .notice {
   position: sticky; bottom: 12px; z-index: 6; margin-top: 16px; padding: 10px 12px;
   display: flex; align-items: center; justify-content: space-between; gap: 10px;

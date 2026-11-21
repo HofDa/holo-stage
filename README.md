@@ -21,6 +21,7 @@ On the very first start a short tutorial walks through setup: building the pyram
 *Story → Load the volcano demo story* gives you a complete example to take apart.
 
 1. **Videos → Add video…**: choose one clip, or drag individual video files onto the panel. Use plain, upright, unmirrored videos on a black background. The app rotates and flips each one for its face. Square videos fill the tiles best.
+   To use a video, drag it from the library (or from the *Drag onto a slot* strip above the Story and Buttons tabs) onto any clip field, a scene header, a player's free play clips, or a pyramid face. Hover over a tab while dragging to switch to it. Clips from the bundled packs can be dragged too; they're added to the library on drop.
 2. **Story**: add scenes in the order they should play. Click a scene to edit it; the stage jumps to it and shows what you type.
 
 | Scene | What happens |

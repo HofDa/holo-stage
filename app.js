@@ -116,6 +116,17 @@ const BUILTIN_PACKS = [
     ],
   },
   {
+    id: 'amoc',
+    titleKey: 'packAmoc',
+    viewerUrl: 'amoc/index.html',
+    clips: [
+      { url: 'amoc/amoc_loop_turning.mp4', name: 'AMOC – ocean conveyor, turning (loop)' },
+      { url: 'amoc/amoc_trace.mp4', name: 'AMOC – tracing the conveyor' },
+      { url: 'amoc/amoc_slowdown.mp4', name: 'AMOC – meltwater slowdown' },
+      { url: 'amoc/amoc_loop.mp4', name: 'AMOC – ocean conveyor (loop)' },
+    ],
+  },
+  {
     id: 'volcano',
     titleKey: 'packVolcano',
     clips: [

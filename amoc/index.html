@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AMOC Ocean Conveyor</title>
+<style>
+  :root {
+    --panel: rgba(8, 12, 20, 0.82);
+    --line: rgba(255, 255, 255, 0.12);
+    --fg: #eaf1fb;
+    --muted: #8d9db5;
+    --warm: #ff6a2b;
+    --cold: #3cb4ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif; user-select: none; }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+  canvas:active { cursor: grabbing; }
+  .hud { position: fixed; inset: 0; pointer-events: none; display: flex; flex-direction: column;
+    justify-content: space-between; padding: 16px; }
+  body.headless .hud { display: none; }
+  .card { pointer-events: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 12px 15px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+  .top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+  h1 { font-size: 16px; font-weight: 650; }
+  h1 span { color: var(--muted); font-weight: 500; }
+  .caption { font-size: 13px; color: var(--muted); margin-top: 4px; max-width: 460px; line-height: 1.4; min-height: 2.8em; }
+  .legend { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+  .legend div { display: flex; align-items: center; gap: 8px; }
+  .sw { width: 22px; height: 4px; border-radius: 2px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
+  button { appearance: none; background: rgba(255,255,255,0.07); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 9px; padding: 7px 12px; min-height: 34px; font: 600 12.5px/1 inherit; cursor: pointer; }
+  button:hover { background: rgba(255,255,255,0.14); }
+  button[aria-pressed="true"] { background: rgba(255,106,43,0.22); border-color: var(--warm); color: #ffd6c2; }
+  @media (max-width: 560px) { .legend { display: none; } }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="hud">
+  <div class="top">
+    <div class="card">
+      <h1>AMOC <span>· Atlantic Meridional Overturning Circulation</span></h1>
+      <p class="caption" id="caption">Warm surface water flows north, cools and sinks near Greenland, and returns south in the deep ocean.</p>
+    </div>
+    <div class="card legend">
+      <div><i class="sw" style="background:linear-gradient(90deg,#ff5a1f,#ffb070)"></i>Warm surface current</div>
+      <div><i class="sw" style="background:linear-gradient(90deg,#ffd9e8,#7fc8ff)"></i>Cooling &amp; sinking</div>
+      <div><i class="sw" style="background:linear-gradient(90deg,#3cb4ff,#2a6dff)"></i>Cold deep return flow</div>
+      <div><i class="sw" style="background:#d8f3ff"></i>Greenland meltwater</div>
+    </div>
+  </div>
+  <div class="card bar">
+    <button data-mode="loop" aria-pressed="true">Circulation</button>
+    <button data-mode="story" aria-pressed="false">Trace the loop</button>
+    <button data-mode="weaken" aria-pressed="false">Slowdown</button>
+    <button id="spin" aria-pressed="false">Spin 72°/s</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ---------------------------------------------------------------- math
+const D2R = Math.PI / 180;
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+const ease = t => t * t * (3 - 2 * t);
+function llv(lat, lon) {
+  const a = lat * D2R, b = lon * D2R;
+  return [Math.cos(a) * Math.sin(b), Math.sin(a), Math.cos(a) * Math.cos(b)];
+}
+const vadd = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const vsub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const vmul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+const vlen = a => Math.hypot(a[0], a[1], a[2]);
+const vnorm = a => vmul(a, 1 / (vlen(a) || 1));
+const vcross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const vdot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+// row-major 3x3 globe rotation: object (lat/lon) space -> world, so (lat0, lon0) faces the camera
+function globeRot(lat0, lon0) {
+  const y = -lon0 * D2R, x = lat0 * D2R;
+  const cy = Math.cos(y), sy = Math.sin(y), cx = Math.cos(x), sx = Math.sin(x);
+  const Ry = [cy, 0, sy, 0, 1, 0, -sy, 0, cy];
+  const Rx = [1, 0, 0, 0, cx, -sx, 0, sx, cx];
+  const m = new Array(9);
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++)
+    m[r * 3 + c] = Rx[r * 3] * Ry[c] + Rx[r * 3 + 1] * Ry[3 + c] + Rx[r * 3 + 2] * Ry[6 + c];
+  return m;
+}
+const colMajor3 = m => new Float32Array([m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]]);
+const mulT3 = (m, v) => [m[0] * v[0] + m[3] * v[1] + m[6] * v[2], m[1] * v[0] + m[4] * v[1] + m[7] * v[2], m[2] * v[0] + m[5] * v[1] + m[8] * v[2]];
+
+function perspective(fovy, aspect, n, f) {
+  const t = 1 / Math.tan(fovy / 2);
+  return [t / aspect, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0];
+}
+function mul4(a, b) { // column-major
+  const o = new Array(16);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+    let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s;
+  }
+  return o;
+}
+function inv4(m) {
+  const inv = new Array(16);
+  inv[0] = m[5]*m[10]*m[15]-m[5]*m[11]*m[14]-m[9]*m[6]*m[15]+m[9]*m[7]*m[14]+m[13]*m[6]*m[11]-m[13]*m[7]*m[10];
+  inv[4] = -m[4]*m[10]*m[15]+m[4]*m[11]*m[14]+m[8]*m[6]*m[15]-m[8]*m[7]*m[14]-m[12]*m[6]*m[11]+m[12]*m[7]*m[10];
+  inv[8] = m[4]*m[9]*m[15]-m[4]*m[11]*m[13]-m[8]*m[5]*m[15]+m[8]*m[7]*m[13]+m[12]*m[5]*m[11]-m[12]*m[7]*m[9];
+  inv[12] = -m[4]*m[9]*m[14]+m[4]*m[10]*m[13]+m[8]*m[5]*m[14]-m[8]*m[6]*m[13]-m[12]*m[5]*m[10]+m[12]*m[6]*m[9];
+  inv[1] = -m[1]*m[10]*m[15]+m[1]*m[11]*m[14]+m[9]*m[2]*m[15]-m[9]*m[3]*m[14]-m[13]*m[2]*m[11]+m[13]*m[3]*m[10];
+  inv[5] = m[0]*m[10]*m[15]-m[0]*m[11]*m[14]-m[8]*m[2]*m[15]+m[8]*m[3]*m[14]+m[12]*m[2]*m[11]-m[12]*m[3]*m[10];
+  inv[9] = -m[0]*m[9]*m[15]+m[0]*m[11]*m[13]+m[8]*m[1]*m[15]-m[8]*m[3]*m[13]-m[12]*m[1]*m[11]+m[12]*m[3]*m[9];
+  inv[13] = m[0]*m[9]*m[14]-m[0]*m[10]*m[13]-m[8]*m[1]*m[14]+m[8]*m[2]*m[13]+m[12]*m[1]*m[10]-m[12]*m[2]*m[9];
+  inv[2] = m[1]*m[6]*m[15]-m[1]*m[7]*m[14]-m[5]*m[2]*m[15]+m[5]*m[3]*m[14]+m[13]*m[2]*m[7]-m[13]*m[3]*m[6];
+  inv[6] = -m[0]*m[6]*m[15]+m[0]*m[7]*m[14]+m[4]*m[2]*m[15]-m[4]*m[3]*m[14]-m[12]*m[2]*m[7]+m[12]*m[3]*m[6];
+  inv[10] = m[0]*m[5]*m[15]-m[0]*m[7]*m[13]-m[4]*m[1]*m[15]+m[4]*m[3]*m[13]+m[12]*m[1]*m[7]-m[12]*m[3]*m[5];
+  inv[14] = -m[0]*m[5]*m[14]+m[0]*m[6]*m[13]+m[4]*m[1]*m[14]-m[4]*m[2]*m[13]-m[12]*m[1]*m[6]+m[12]*m[2]*m[5];
+  inv[3] = -m[1]*m[6]*m[11]+m[1]*m[7]*m[10]+m[5]*m[2]*m[11]-m[5]*m[3]*m[10]-m[9]*m[2]*m[7]+m[9]*m[3]*m[6];
+  inv[7] = m[0]*m[6]*m[11]-m[0]*m[7]*m[10]-m[4]*m[2]*m[11]+m[4]*m[3]*m[10]+m[8]*m[2]*m[7]-m[8]*m[3]*m[6];
+  inv[11] = -m[0]*m[5]*m[11]+m[0]*m[7]*m[9]+m[4]*m[1]*m[11]-m[4]*m[3]*m[9]-m[8]*m[1]*m[7]+m[8]*m[3]*m[5];
+  inv[15] = m[0]*m[5]*m[10]-m[0]*m[6]*m[9]-m[4]*m[1]*m[10]+m[4]*m[2]*m[9]+m[8]*m[1]*m[6]-m[8]*m[2]*m[5];
+  let det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
+  det = 1 / det;
+  return inv.map(v => v * det);
+}
+
+// ---------------------------------------------------------------- current paths
+// waypoint: [lat, lon, depth (0 surface .. 1 deep), temperature (1 warm .. 0 cold), speed, key?]
+const SURF_R = 1.012, DEEP_R = 0.952;
+const radiusAt = d => lerp(SURF_R, DEEP_R, d);
+
+const UPPER_SOUTH = [
+  [-39, 19, 0, 0.72, 1.0, 'start'],   // Agulhas leakage off the Cape
+  [-34, 8, 0, 0.78, 1.0],
+  [-26, -4, 0, 0.84, 1.0],
+  [-17, -18, 0, 0.9, 1.05],
+  [-9, -30, 0, 0.95, 1.1],
+  [-2, -40, 0, 1, 1.2],                // North Brazil Current
+  [5, -49, 0, 1, 1.3],
+  [11, -59, 0, 1, 1.3],
+  [15, -70, 0, 1, 1.25],               // Caribbean
+  [18.5, -82, 0, 1, 1.25],
+  [23, -87.5, 0, 1, 1.3],              // Loop Current
+  [26, -86, 0, 1, 1.4],
+  [24.3, -81.5, 0, 1, 1.7],            // Florida Straits
+  [27, -79.8, 0, 1, 1.9],
+  [31, -79.6, 0, 1, 2.0],              // Gulf Stream
+  [35, -74.8, 0, 1, 2.0],
+  [38.5, -68, 0, 0.96, 1.9],
+  [41, -57, 0, 0.92, 1.7],
+  [44, -45, 0, 0.86, 1.5],
+];
+const NORDIC_ARM = [
+  [48.5, -34, 0, 0.8, 1.35],           // North Atlantic Current
+  [53, -24, 0, 0.73, 1.25],
+  [57.5, -15, 0, 0.66, 1.2],
+  [61.5, -6, 0, 0.58, 1.1],            // Faroe–Shetland
+  [65.5, 1, 0, 0.5, 1.0],              // Norwegian Atlantic Current
+  [70, 4, 0, 0.42, 0.9],
+  [73.5, -1, 0, 0.34, 0.8, 'sink'],    // Greenland Sea convection
+];
+const LABRADOR_ARM = [
+  [49, -38, 0, 0.76, 1.3],
+  [54.5, -33, 0, 0.68, 1.2],
+  [59, -32.5, 0, 0.6, 1.1],            // Irminger Current
+  [62, -37, 0, 0.52, 1.0],
+  [60.5, -42.5, 0, 0.46, 1.0],
+  [59.6, -46.5, 0, 0.4, 1.0],          // Cape Farewell
+  [62, -52.5, 0, 0.33, 0.9],           // West Greenland Current
+  [60, -56.5, 0, 0.28, 0.8, 'sink'],   // Labrador Sea convection
+];
+const DEEP_NORDIC = [
+  [72.5, -11, 1, 0, 0.55],
+  [68.5, -22, 1, 0, 0.6],
+  [65.6, -28, 1, 0, 0.7],              // Denmark Strait overflow
+  [62.5, -35, 1, 0, 0.65],
+  [59, -42, 1, 0, 0.6],
+  [56.5, -48.5, 1, 0, 0.6],
+];
+const DEEP_SOUTH = [
+  [53, -50.5, 1, 0, 0.6],              // Deep Western Boundary Current
+  [47.5, -46.5, 1, 0, 0.6],
+  [42.5, -55, 1, 0, 0.6],
+  [38, -66, 1, 0, 0.6],
+  [33, -72.5, 1, 0, 0.6],
+  [26, -72.5, 1, 0, 0.6],
+  [19, -63, 1, 0, 0.6],
+  [12, -54, 1, 0, 0.6],
+  [4, -44, 1, 0, 0.6],
+  [-5, -30.5, 1, 0, 0.6],
+  [-14, -32, 1, 0, 0.6],
+  [-24, -37, 1, 0, 0.6],
+  [-34, -44, 1, 0, 0.6],
+  [-43, -45, 1, 0, 0.6],
+  [-51, -35, 1, 0, 0.6],
+  [-57, -20, 1, 0.05, 0.6],
+  [-60.5, -6, 1, 0.08, 0.6, 'up'],     // Southern Ocean upwelling
+  [-61.5, 4, 0.65, 0.16, 0.6],
+  [-59, 11, 0.25, 0.3, 0.7],
+  [-54.5, 17, 0, 0.45, 0.85],
+  [-47, 21, 0, 0.58, 0.95],
+  [-42, 21.5, 0, 0.66, 1.0],
+];
+// Sinking: a tightening spiral from the surface down to the deep layer
+function sinkSpiral(lat, lon, t0, turns = 2.4, n = 22) {
+  const pts = [];
+  for (let i = 1; i <= n; i++) {
+    const u = i / n, ang = u * turns * 2 * Math.PI;
+    const rad = lerp(2.6, 0.5, u);
+    pts.push([lat + rad * Math.sin(ang) * 0.55, lon + rad * Math.cos(ang) / Math.cos(lat * D2R) * 0.55,
+      ease(u), lerp(t0, 0, u), 0.55, i === n ? 'deep' : undefined]);
+  }
+  return pts;
+}
+const LOOPS = [
+  { name: 'nordic', wps: [...UPPER_SOUTH, ...NORDIC_ARM, ...sinkSpiral(74.3, -5, 0.34), ...DEEP_NORDIC, ...DEEP_SOUTH], n: 660, bright: 1 },
+  { name: 'labrador', wps: [...UPPER_SOUTH, ...LABRADOR_ARM, ...sinkSpiral(58, -54, 0.28), ...DEEP_SOUTH], n: 600, bright: 0.9 },
+];
+// Rest of the global conveyor (Indo-Pacific), dimmer context so the far side of the globe is not empty
+const GLOBAL = { name: 'global', n: 520, bright: 0.5, wps: [
+  [-60, 60, 1, 0, 0.6], [-61, 100, 1, 0, 0.6], [-60, 140, 1, 0, 0.6], [-52, 168, 1, 0, 0.6],
+  [-38, -176, 1, 0, 0.6], [-18, -168, 1, 0, 0.6], [2, -165, 1, 0, 0.6], [20, -168, 1, 0, 0.6],
+  [36, -172, 1, 0.05, 0.6], [44, -168, 0.6, 0.25, 0.6], [44, -178, 0.15, 0.45, 0.7], // North Pacific upwelling
+  [38, 165, 0, 0.6, 0.9], [28, 152, 0, 0.72, 1.0], [17, 138, 0, 0.85, 1.0], [7, 128, 0, 0.95, 1.0],
+  [-2, 121.5, 0, 1, 1.1], [-9, 114, 0, 1, 1.1],                           // Indonesian Throughflow
+  [-13, 98, 0, 1, 1.0], [-17, 80, 0, 0.95, 1.0], [-22, 62, 0, 0.9, 1.0], [-30, 46, 0, 0.85, 1.1],
+  [-36, 31, 0, 0.8, 1.3],                                                    // Agulhas Current
+  [-41, 23, 0, 0.72, 1.1], [-47, 30, 0.4, 0.4, 0.8], [-55, 42, 0.9, 0.1, 0.6],
+] };
+// Antarctic Circumpolar Current: context ring, flows east all the way round
+const ACC = { name: 'acc', wps: [], n: 420, bright: 0.26 };
+for (let i = 0; i < 30; i++) {
+  const lon = -180 + i * 12;
+  ACC.wps.push([-56 - 3.5 * Math.sin(lon * D2R * 2 + 0.7) - 2 * Math.sin(lon * D2R * 5), lon, 0, 0.12, 1.0]);
+}
+
+const TABLE = 4096, LANES = 3, TRAIL = 7;
+
+function catmull(p0, p1, p2, p3, t) { // centripetal Catmull–Rom
+  const tj = (a, b) => Math.pow(Math.max(vlen(vsub(b, a)), 1e-6), 0.5);
+  const t0 = 0, t1 = t0 + tj(p0, p1), t2 = t1 + tj(p1, p2), t3 = t2 + tj(p2, p3);
+  const tt = lerp(t1, t2, t);
+  const A1 = vadd(vmul(p0, (t1 - tt) / (t1 - t0)), vmul(p1, (tt - t0) / (t1 - t0)));
+  const A2 = vadd(vmul(p1, (t2 - tt) / (t2 - t1)), vmul(p2, (tt - t1) / (t2 - t1)));
+  const A3 = vadd(vmul(p2, (t3 - tt) / (t3 - t2)), vmul(p3, (tt - t2) / (t3 - t2)));
+  const B1 = vadd(vmul(A1, (t2 - tt) / (t2 - t0)), vmul(A2, (tt - t0) / (t2 - t0)));
+  const B2 = vadd(vmul(A2, (t3 - tt) / (t3 - t1)), vmul(A3, (tt - t1) / (t3 - t1)));
+  return vadd(vmul(B1, (t2 - tt) / (t2 - t1)), vmul(B2, (tt - t1) / (t2 - t1)));
+}
+
+function buildPath(def) {
+  const W = def.wps, n = W.length;
+  const P = W.map(w => vmul(llv(w[0], w[1]), radiusAt(w[2])));
+  const raw = []; // dense samples along the closed loop
+  const keys = {};
+  const SUB = 36;
+  for (let i = 0; i < n; i++) {
+    const a = W[i], b = W[(i + 1) % n];
+    if (a[5]) keys[a[5]] = raw.length;
+    for (let s = 0; s < SUB; s++) {
+      const u = s / SUB;
+      const p = catmull(P[(i - 1 + n) % n], P[i], P[(i + 1) % n], P[(i + 2) % n], u);
+      const depth = lerp(a[2], b[2], u);
+      const pos = vmul(vnorm(p), radiusAt(depth));
+      raw.push({ pos, depth, temp: lerp(a[3], b[3], u), speed: lerp(a[4], b[4], u) });
+    }
+  }
+  // arc length and travel time
+  let arc = 0, tau = 0;
+  raw[0].arc = 0; raw[0].tau = 0;
+  for (let i = 1; i <= raw.length; i++) {
+    const r0 = raw[i - 1], r1 = raw[i % raw.length];
+    const ds = vlen(vsub(r1.pos, r0.pos));
+    arc += ds; tau += ds / ((r0.speed + r1.speed) / 2);
+    if (i < raw.length) { r1.arc = arc; r1.tau = tau; }
+  }
+  const totalArc = arc, totalTau = tau;
+  // resample uniformly in travel time
+  const tab = { x: new Float32Array(TABLE), y: new Float32Array(TABLE), z: new Float32Array(TABLE),
+    temp: new Float32Array(TABLE), depth: new Float32Array(TABLE), arc: new Float32Array(TABLE),
+    nx: new Float32Array(TABLE), ny: new Float32Array(TABLE), nz: new Float32Array(TABLE), w: new Float32Array(TABLE) };
+  let j = 0;
+  for (let k = 0; k < TABLE; k++) {
+    const target = k / TABLE * totalTau;
+    while (j < raw.length - 1 && raw[j + 1].tau < target) j++;
+    const r0 = raw[j], r1 = raw[(j + 1) % raw.length];
+    const t1 = j + 1 < raw.length ? r1.tau : totalTau, a1 = j + 1 < raw.length ? r1.arc : totalArc;
+    const u = clamp((target - r0.tau) / Math.max(t1 - r0.tau, 1e-9), 0, 1);
+    const pos = vadd(vmul(r0.pos, 1 - u), vmul(r1.pos, u));
+    tab.x[k] = pos[0]; tab.y[k] = pos[1]; tab.z[k] = pos[2];
+    tab.temp[k] = lerp(r0.temp, r1.temp, u);
+    tab.depth[k] = lerp(r0.depth, r1.depth, u);
+    tab.arc[k] = lerp(r0.arc, a1, u) / totalArc;
+    const lat = Math.asin(clamp(pos[1] / vlen(pos), -1, 1)) / D2R;
+    // how much this stretch belongs to the overturning (weakens in a slowdown); the Gulf Stream is wind-driven too
+    tab.w[k] = Math.max(smooth(38, 52, lat), smooth(0.05, 0.35, tab.depth[k]), def.name === 'acc' || def.name === 'global' ? 0 : 0.35 * smooth(-30, -45, lat));
+  }
+  for (let k = 0; k < TABLE; k++) { // sideways direction, for lanes
+    const a = (k - 2 + TABLE) % TABLE, b = (k + 2) % TABLE;
+    const tg = [tab.x[b] - tab.x[a], tab.y[b] - tab.y[a], tab.z[b] - tab.z[a]];
+    const up = [tab.x[k], tab.y[k], tab.z[k]];
+    const sd = vnorm(vcross(tg, up));
+    tab.nx[k] = sd[0]; tab.ny[k] = sd[1]; tab.nz[k] = sd[2];
+  }
+  const keyArc = {};
+  for (const k in keys) keyArc[k] = raw[keys[k]].arc / totalArc;
+  return { def, tab, totalTau, keyArc };
+}
+
+const PATHS = LOOPS.map(buildPath);
+const CONTEXT_PATHS = [buildPath(ACC), buildPath(GLOBAL)];
+const FLOW = 0.09; // radians per second at speed 1
+
+// stage 0..4 -> fraction of the path revealed (0 start, 1 sinking, 2 deep, 3 upwelling, 4 whole loop)
+function stageArc(path, stage) {
+  const k = [0, path.keyArc.sink, path.keyArc.deep, path.keyArc.up, 1];
+  if (stage >= 4) return 1.01;
+  const i = Math.floor(clamp(stage, 0, 3.999));
+  return lerp(k[i], k[i + 1], stage - i);
+}
+
+function tempColor(t) {
+  // cold deep blue -> pale (cooling) -> warm orange-red
+  const cold = [0.06, 0.32, 1.0], mid = [0.95, 0.8, 0.95], warm = [1.0, 0.32, 0.07];
+  if (t < 0.5) { const u = smooth(0, 0.5, t); return [lerp(cold[0], mid[0], u), lerp(cold[1], mid[1], u), lerp(cold[2], mid[2], u)]; }
+  const u = smooth(0.5, 1, t);
+  return [lerp(mid[0], warm[0], u), lerp(mid[1], warm[1], u), lerp(mid[2], warm[2], u)];
+}
+
+// ---------------------------------------------------------------- meltwater seeds
+function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+const MELT = [];
+{
+  const r = rng(7);
+  const east = [[76, -18], [73, -21], [70, -23], [67.5, -31], [65, -38.5], [62, -42]];
+  const west = [[60.8, -47], [63.5, -51.5], [66.5, -53.8], [69.5, -52.5], [72.5, -56]];
+  for (let i = 0; i < 520; i++) {
+    const isEast = r() < 0.55, src = isEast ? east : west;
+    const k = Math.floor(r() * (src.length - 1)), f = r();
+    const lat = lerp(src[k][0], src[k + 1][0], f), lon = lerp(src[k][1], src[k + 1][1], f);
+    const drift = isEast ? [-(3 + r() * 6), 1 + r() * 6] : [-(1 + r() * 4), -(4 + r() * 9)];
+    MELT.push({ lat, lon, dlat: drift[0], dlon: drift[1], phase: r(), rate: 0.18 + r() * 0.12, wob: r() * 6.28 });
+  }
+}
+
+// ---------------------------------------------------------------- WebGL
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, preserveDrawingBuffer: true, premultipliedAlpha: false });
+
+function sh(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function prog(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const name = gl.getActiveUniform(p, i).name; u[name] = gl.getUniformLocation(p, name); }
+  return { p, u };
+}
+
+const globeProg = prog(`#version 300 es
+in vec2 aPos; out vec2 vNdc;
+void main() { vNdc = aPos; gl_Position = vec4(aPos, 0.0, 1.0); }`,
+`#version 300 es
+precision highp float;
+in vec2 vNdc; out vec4 o;
+uniform mat4 uInvVP; uniform vec3 uEye; uniform mat3 uM; uniform sampler2D uEarth;
+uniform float uFade, uColdBlob, uMelt, uOceanAlpha;
+const float PI = 3.14159265;
+vec3 llv(float la, float lo) { la = radians(la); lo = radians(lo); return vec3(cos(la)*sin(lo), sin(la), cos(la)*cos(lo)); }
+void main() {
+  vec4 a = uInvVP * vec4(vNdc, -1.0, 1.0), b = uInvVP * vec4(vNdc, 1.0, 1.0);
+  vec3 ro = uEye, rd = normalize(b.xyz / b.w - a.xyz / a.w);
+  float bq = dot(ro, rd), c = dot(ro, ro) - 1.0, h = bq * bq - c;
+  vec3 atmCol = vec3(0.22, 0.55, 1.0);
+  float dmin = length(ro + rd * max(-bq, 0.0));
+  if (h < 0.0) {
+    float g = exp(-(dmin - 1.0) * 34.0) * 0.5 + exp(-(dmin - 1.0) * 9.0) * 0.07;
+    o = vec4(atmCol * g * uFade, 0.0);
+    return;
+  }
+  vec3 p = ro + rd * (-bq - sqrt(h));
+  vec3 n = normalize(p), no = transpose(uM) * n;
+  float lat = asin(clamp(no.y, -1.0, 1.0)), lon = atan(no.x, no.z);
+  vec3 tex = texture(uEarth, vec2(lon / (2.0 * PI) + 0.5, 0.5 - lat / PI)).rgb;
+  float latd = degrees(lat), lond = degrees(lon);
+  float land = smoothstep(0.35, 0.65, tex.r);
+  float coast = 1.0 - abs(tex.b * 2.0 - 1.0); coast = smoothstep(0.35, 1.0, coast);
+  float shelf = smoothstep(0.03, 0.5, tex.g) * (1.0 - land);
+
+  vec3 L = normalize(vec3(-0.45, 0.55, 0.75));
+  float lam = max(dot(n, L), 0.0), view = max(dot(n, -rd), 0.0);
+  float fres = pow(1.0 - view, 3.0);
+
+  // land: greener tropics, dry subtropics, ice sheets on Greenland and Antarctica
+  float alat = abs(latd);
+  vec3 landCol = mix(vec3(0.07, 0.17, 0.09), vec3(0.24, 0.2, 0.13), smoothstep(12.0, 24.0, alat) * (1.0 - smoothstep(34.0, 44.0, alat)));
+  landCol = mix(landCol, vec3(0.12, 0.15, 0.13), smoothstep(45.0, 58.0, alat));
+  // Greenland only (not Baffin Island, Ellesmere or Iceland)
+  float greenland = step(59.0, latd) * step(-58.0 - max(latd - 75.0, 0.0) * 2.2, lond) * step(lond, -11.0)
+                  * (1.0 - step(latd, 67.5) * step(-26.0, lond));
+  float ice = max(greenland * smoothstep(59.0, 62.0, latd), smoothstep(-62.0, -66.0, latd));
+  ice = max(ice, smoothstep(74.0, 82.0, latd) * 0.7);
+  landCol = mix(landCol, vec3(0.78, 0.86, 0.95) * (1.0 - 0.18 * uMelt * greenland), ice);
+  landCol *= 0.32 + 0.9 * lam;
+
+  // ocean: deep navy, lighter shelves, faintly warmer tropics
+  vec3 sea = vec3(0.012, 0.045, 0.12) + vec3(0.03, 0.12, 0.16) * shelf;
+  sea += vec3(0.05, 0.03, 0.0) * exp(-pow(latd / 22.0, 2.0));
+  float blob = smoothstep(cos(radians(13.0)), 1.0, dot(no, llv(55.0, -34.0)));
+  sea = mix(sea, vec3(0.08, 0.3, 0.55), blob * uColdBlob * 0.75);
+  sea *= 0.45 + 0.75 * lam;
+  sea += vec3(0.35, 0.45, 0.55) * pow(max(dot(reflect(rd, n), L), 0.0), 40.0) * 0.25;
+
+  vec3 col = mix(sea, landCol, land) + vec3(0.32, 0.68, 0.9) * coast * (0.28 + 0.25 * lam);
+  float alpha = mix(uOceanAlpha + (1.0 - uOceanAlpha) * fres, 1.0, land);
+  vec3 rim = atmCol * (fres * 0.85 + pow(1.0 - view, 8.0) * 0.6);
+  o = vec4((col * alpha + rim) * uFade, alpha * uFade);
+}`);
+
+const ptProg = prog(`#version 300 es
+in vec3 aPos; in vec4 aCol; in vec2 aSD; // size px, depth
+uniform mat4 uVP; uniform mat3 uM; uniform vec3 uEyeObj; uniform float uPx;
+out vec4 vCol;
+void main() {
+  vec3 w = uM * aPos;
+  gl_Position = uVP * vec4(w, 1.0);
+  float R = mix(0.996, 0.9, aSD.y);
+  vec3 d = aPos - uEyeObj; float L = length(d); vec3 dir = d / L;
+  float b = dot(uEyeObj, dir), c = dot(uEyeObj, uEyeObj) - R * R, h = b * b - c;
+  float vis = 1.0;
+  if (h > 0.0 && (-b - sqrt(h)) < L - 0.003) vis = 1.0 - smoothstep(0.0, 0.012, h);
+  vCol = vec4(aCol.rgb, aCol.a * vis);
+  gl_PointSize = vis <= 0.0 ? 0.0 : aSD.x * uPx;
+}`,
+`#version 300 es
+precision mediump float;
+in vec4 vCol; out vec4 o;
+void main() {
+  float r = length(gl_PointCoord * 2.0 - 1.0);
+  if (r > 1.0) discard;
+  float a = exp(-r * r * 3.2) * (1.0 - smoothstep(0.8, 1.0, r));
+  float core = pow(max(1.0 - r * 1.6, 0.0), 2.0);
+  vec3 c = vCol.rgb * (1.0 + core * 0.9) + vec3(core * 0.12);
+  o = vec4(c * vCol.a * a, 0.0);
+}`);
+
+const quad = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+const globeVAO = gl.createVertexArray();
+gl.bindVertexArray(globeVAO);
+{
+  const loc = gl.getAttribLocation(globeProg.p, 'aPos');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+}
+
+const STRIDE = 9;
+function makePtBuf() {
+  const vao = gl.createVertexArray(), buf = gl.createBuffer();
+  gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  const loc = n => gl.getAttribLocation(ptProg.p, n);
+  gl.enableVertexAttribArray(loc('aPos')); gl.vertexAttribPointer(loc('aPos'), 3, gl.FLOAT, false, STRIDE * 4, 0);
+  gl.enableVertexAttribArray(loc('aCol')); gl.vertexAttribPointer(loc('aCol'), 4, gl.FLOAT, false, STRIDE * 4, 12);
+  gl.enableVertexAttribArray(loc('aSD')); gl.vertexAttribPointer(loc('aSD'), 2, gl.FLOAT, false, STRIDE * 4, 28);
+  return { vao, buf, data: new Float32Array(STRIDE * 60000), n: 0 };
+}
+const deepBuf = makePtBuf(), surfBuf = makePtBuf();
+
+const earthTex = gl.createTexture();
+let LAND = null; // coarse land mask for CPU-side particles
+function landAt(lat, lon) {
+  if (!LAND) return 0;
+  const x = Math.floor(((lon + 180) / 360 % 1 + 1) % 1 * 512), y = clamp(Math.floor((90 - lat) / 180 * 256), 0, 255);
+  return LAND[y * 512 + x] / 255;
+}
+function loadEarth() {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+      const cx = c.getContext('2d'); cx.drawImage(img, 0, 0, 512, 256);
+      const px = cx.getImageData(0, 0, 512, 256).data;
+      LAND = new Uint8Array(512 * 256);
+      for (let i = 0; i < LAND.length; i++) LAND[i] = px[i * 4];
+      gl.bindTexture(gl.TEXTURE_2D, earthTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      res();
+    };
+    img.onerror = rej;
+    img.src = 'earth.png';
+  });
+}
+
+// ---------------------------------------------------------------- particles per frame
+function push(pos, col, a, size, depth) {
+  const B = depth > 0.5 ? deepBuf : surfBuf;
+  if (B.n >= 60000) return;
+  const o = B.n++ * STRIDE, d = B.data;
+  d[o] = pos[0]; d[o + 1] = pos[1]; d[o + 2] = pos[2];
+  d[o + 3] = col[0]; d[o + 4] = col[1]; d[o + 5] = col[2]; d[o + 6] = a;
+  d[o + 7] = size; d[o + 8] = depth;
+}
+
+function sample(tab, tau, lane) {
+  let f = (tau % 1 + 1) % 1 * TABLE;
+  const i = Math.floor(f) % TABLE, j = (i + 1) % TABLE; f -= Math.floor(f);
+  const off = lane * 0.0068 + 0.0035 * Math.sin(tau * 2 * Math.PI * 41 + lane * 2.1);
+  const L = (k) => tab[k][i] + (tab[k][j] - tab[k][i]) * f;
+  return {
+    pos: [L('x') + L('nx') * off, L('y') + L('ny') * off, L('z') + L('nz') * off],
+    temp: L('temp'), depth: L('depth'), arc: L('arc'), w: L('w'),
+  };
+}
+
+function emitPath(path, st, opts) {
+  const { tab, def } = path;
+  const N = def.n;
+  let rate = FLOW / path.totalTau; // travel-time fractions per second
+  if (opts.loopDur) { // quantise so the loop clip is seamless
+    const step = LANES / N;
+    rate = Math.max(1, Math.round(rate * opts.loopDur / step)) * step / opts.loopDur;
+  }
+  const phase = opts.flowTime * rate;
+  const revealArc = st.reveal !== undefined ? stageArc(path, st.reveal) : 1.01;
+  const fade = st.fade;
+  const strength = st.strength;
+  const amoc = def.name === 'nordic' || def.name === 'labrador';
+  const bright = def.bright * (amoc ? 1 : st.accAlpha);
+  // faint guide ribbon
+  const G = amoc ? 900 : 500;
+  for (let g = 0; g < G; g++) {
+    const s = sample(tab, g / G, 0);
+    const vis = smooth(revealArc + 0.004, revealArc - 0.01, s.arc);
+    if (vis <= 0) continue;
+    const k = amoc ? lerp(1, strength * 0.7 + 0.15, s.w) : 1;
+    const deep = s.depth > 0.5;
+    push(s.pos, tempColor(s.temp), 0.085 * vis * fade * bright * k * (deep ? 1.6 : 1), deep ? 6 : 6.5, s.depth);
+  }
+  for (let i = 0; i < N; i++) {
+    const lane = (i % LANES) - 1;
+    const tau0 = i / N + phase;
+    for (let t = 0; t < TRAIL; t++) {
+      const s = sample(tab, tau0 - t * 0.0019, lane);
+      const vis = smooth(revealArc + 0.002, revealArc - 0.012, s.arc);
+      if (vis <= 0) continue;
+      const k = amoc ? lerp(1, Math.pow(strength, 1.4) * 0.85 + 0.12, s.w) : 1;
+      const tail = 1 - t / TRAIL;
+      const deep = s.depth > 0.5;
+      const a = (0.25 + 0.75 * tail * tail) * vis * fade * bright * k * (deep ? 1.85 : 1.0) * 0.62;
+      const size = (3.0 + 3.6 * tail) * (deep ? 1.1 : 1.0);
+      push(s.pos, tempColor(s.temp), a, size, s.depth);
+    }
+  }
+  // glowing head where the trace is drawing
+  if (st.reveal !== undefined && st.reveal > 0.02 && st.reveal < 3.99 && amoc) {
+    let lo = 0, hi = TABLE - 1; // arc is monotonic in the table
+    while (lo < hi) { const m = (lo + hi) >> 1; if (tab.arc[m] < revealArc) lo = m + 1; else hi = m; }
+    const s = sample(tab, lo / TABLE, 0);
+    const c = tempColor(s.temp);
+    push(s.pos, c, 0.95 * fade, 22, s.depth);
+    push(s.pos, [1, 1, 1], 0.8 * fade, 9, s.depth);
+  }
+}
+
+function emitMelt(st, opts) {
+  if (st.melt <= 0.001) return;
+  const col = [0.8, 0.95, 1.0];
+  for (const m of MELT) {
+    for (let t = 0; t < 3; t++) {
+      const u = ((m.phase + (opts.time ?? opts.flowTime) * m.rate - t * 0.018) % 1 + 1) % 1;
+      const lat = m.lat + m.dlat * u + 0.6 * Math.sin(m.wob + u * 7);
+      const lon = m.lon + m.dlon * u + 0.9 * Math.cos(m.wob + u * 5);
+      const sea = 1 - landAt(lat, lon);
+      if (sea < 0.1) continue;
+      const a = st.melt * Math.sin(Math.PI * u) * 0.5 * (1 - t * 0.3) * st.fade * sea;
+      push(vmul(llv(lat, lon), 1.016), col, a, 4.4 - t * 0.8, 0);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- render
+const DIST = 4.9, FOVY = 30 * D2R;
+function render(o) {
+  const width = Math.round(o.width || canvas.clientWidth * devicePixelRatio);
+  const height = Math.round(o.height || canvas.clientHeight * devicePixelRatio);
+  if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+  gl.viewport(0, 0, width, height);
+  const st = {
+    fade: o.fade ?? 1, strength: o.strength ?? 1, melt: o.melt ?? 0, coldBlob: o.coldBlob ?? 0,
+    reveal: o.reveal, accAlpha: o.accAlpha ?? 1,
+  };
+  const M = globeRot(o.viewLat ?? 22, (o.viewLon ?? -34) - (o.spinDeg ?? 0));
+  const aspect = width / height;
+  // keep the globe the same size relative to the shorter side
+  const fov = aspect >= 1 ? FOVY : 2 * Math.atan(Math.tan(FOVY / 2) / aspect);
+  const proj = perspective(fov, aspect, 0.1, 20);
+  const view = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, -(o.camY ?? 0), -DIST, 1];
+  const vp = mul4(proj, view);
+  const eye = [0, o.camY ?? 0, DIST];
+  const eyeObj = mulT3(M, eye);
+
+  deepBuf.n = 0; surfBuf.n = 0;
+  for (const p of CONTEXT_PATHS) emitPath(p, st, o);
+  for (const p of PATHS) emitPath(p, st, o);
+  emitMelt(st, o);
+
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  const pxScale = height / 720;
+  const drawPts = (B) => {
+    if (!B.n) return;
+    gl.useProgram(ptProg.p);
+    gl.uniformMatrix4fv(ptProg.u.uVP, false, new Float32Array(vp));
+    gl.uniformMatrix3fv(ptProg.u.uM, false, colMajor3(M));
+    gl.uniform3fv(ptProg.u.uEyeObj, eyeObj);
+    gl.uniform1f(ptProg.u.uPx, pxScale);
+    gl.bindVertexArray(B.vao); gl.bindBuffer(gl.ARRAY_BUFFER, B.buf);
+    gl.bufferData(gl.ARRAY_BUFFER, B.data.subarray(0, B.n * STRIDE), gl.DYNAMIC_DRAW);
+    gl.drawArrays(gl.POINTS, 0, B.n);
+  };
+  drawPts(deepBuf); // under the translucent sea
+  gl.useProgram(globeProg.p);
+  gl.uniformMatrix4fv(globeProg.u.uInvVP, false, new Float32Array(inv4(vp)));
+  gl.uniform3fv(globeProg.u.uEye, eye);
+  gl.uniformMatrix3fv(globeProg.u.uM, false, colMajor3(M));
+  gl.uniform1f(globeProg.u.uFade, st.fade);
+  gl.uniform1f(globeProg.u.uColdBlob, st.coldBlob);
+  gl.uniform1f(globeProg.u.uMelt, st.melt);
+  gl.uniform1f(globeProg.u.uOceanAlpha, o.oceanAlpha ?? 0.6);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, earthTex);
+  gl.uniform1i(globeProg.u.uEarth, 0);
+  gl.bindVertexArray(globeVAO);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  drawPts(surfBuf);
+}
+
+// ---------------------------------------------------------------- timelines (shared by viewer and renderer)
+const STORY_DUR = 24;
+const STORY_CAPTIONS = [
+  [0, 'Warm, salty water from the tropics flows north along the surface: the Gulf Stream and North Atlantic Current.'],
+  [8.5, 'Near Greenland it gives off its heat, gets colder and denser — and sinks to the deep ocean.'],
+  [11.5, 'Cold deep water creeps south along the sea floor, all the way to the Southern Ocean.'],
+  [17.5, 'There it rises back up, warms again and the conveyor belt closes.'],
+  [20, 'One full lap takes roughly a thousand years.'],
+];
+function storyState(t) {
+  const k = [[0, 0], [1.2, 0], [8.5, 1], [11.5, 2], [17.5, 3], [20, 4]];
+  let reveal = 4;
+  for (let i = 0; i < k.length - 1; i++) if (t < k[i + 1][0]) { reveal = lerp(k[i][1], k[i + 1][1], ease(clamp((t - k[i][0]) / (k[i + 1][0] - k[i][0]), 0, 1))); break; }
+  // camera follows the trace: north Atlantic, then south with the deep water, then back to the full view
+  const cam = [[0, 2, -18], [4, 20, -40], [7.5, 40, -38], [11, 48, -36], [15.5, 6, -32], [18.5, -16, -22], [22.5, 20, -32], [24, 20, -32]];
+  let lat = 20, lon = -32;
+  for (let i = 0; i < cam.length - 1; i++) if (t < cam[i + 1][0]) {
+    const u = ease(clamp((t - cam[i][0]) / (cam[i + 1][0] - cam[i][0]), 0, 1));
+    lat = lerp(cam[i][1], cam[i + 1][1], u); lon = lerp(cam[i][2], cam[i + 1][2], u); break;
+  }
+  return { reveal, viewLat: lat, viewLon: lon, fade: smooth(0, 1.0, t), flowTime: t + 40, accAlpha: smooth(17, 21, t) };
+}
+const WEAKEN_DUR = 20;
+const WEAKEN_CAPTIONS = [
+  [0, 'Today the overturning circulation carries heat far into the North Atlantic.'],
+  [3, 'As the climate warms, Greenland melts — fresh water spreads over the sinking regions.'],
+  [8, 'Fresh water is lighter: less water sinks, and the whole conveyor slows down.'],
+  [14, 'A cold patch forms south of Greenland — the “cold blob” we already see today.'],
+];
+function weakenState(t) {
+  const strengthAt = x => 1 - 0.72 * smooth(6, 15, x);
+  // integrate flow speed so particles slow down smoothly instead of jumping
+  let flow = 0; const dt = 1 / 48;
+  for (let x = 0; x < t; x += dt) flow += Math.min(dt, t - x) * (0.25 + 0.75 * strengthAt(x));
+  return {
+    strength: strengthAt(t), melt: smooth(2.5, 7, t), coldBlob: smooth(10, 16, t),
+    viewLat: lerp(30, 40, smooth(0, 8, t)), viewLon: lerp(-36, -40, smooth(0, 8, t)),
+    flowTime: flow, time: t, fade: smooth(0, 0.8, t),
+  };
+}
+window.amoc = { storyState, weakenState, STORY_DUR, WEAKEN_DUR };
+
+window.holoRender = (o = {}) => { render(o); return canvas.toDataURL('image/png'); };
+
+// ---------------------------------------------------------------- interactive viewer
+const headless = new URLSearchParams(location.search).has('headless');
+if (headless) document.body.classList.add('headless');
+let mode = 'loop', spin = false, t0 = performance.now(), dragLon = 0, dragLat = 0;
+const capEl = document.getElementById('caption');
+const DEFAULT_CAP = capEl.textContent;
+function caption(list, t) { let c = list[0][1]; for (const [at, txt] of list) if (t >= at) c = txt; return c; }
+
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+  mode = b.dataset.mode; t0 = performance.now(); dragLat = dragLon = 0;
+  document.querySelectorAll('[data-mode]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+}));
+document.getElementById('spin').addEventListener('click', e => {
+  spin = !spin; e.currentTarget.setAttribute('aria-pressed', String(spin));
+});
+let drag = null;
+canvas.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY, dragLon, dragLat]; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const k = 180 / Math.min(canvas.clientWidth, canvas.clientHeight);
+  dragLon = drag[2] - (e.clientX - drag[0]) * k;
+  dragLat = clamp(drag[3] + (e.clientY - drag[1]) * k, -60, 60);
+});
+canvas.addEventListener('pointerup', () => { drag = null; });
+
+function loop(now) {
+  const t = (now - t0) / 1000;
+  let o, cap = DEFAULT_CAP;
+  if (mode === 'story') { o = storyState(t % STORY_DUR); cap = caption(STORY_CAPTIONS, t % STORY_DUR); }
+  else if (mode === 'weaken') { o = weakenState(Math.min(t, WEAKEN_DUR + 6)); cap = caption(WEAKEN_CAPTIONS, t); }
+  else o = { viewLat: 22, viewLon: -34, flowTime: t };
+  o.viewLat = clamp(o.viewLat + dragLat, -80, 80);
+  o.viewLon += dragLon;
+  if (spin) o.spinDeg = t * 72;
+  if (capEl.textContent !== cap) capEl.textContent = cap;
+  render(o);
+  requestAnimationFrame(loop);
+}
+
+loadEarth().then(() => {
+  window.holoReady = true;
+  if (!headless) requestAnimationFrame(loop);
+});
+</script>
+</body>
+</html>

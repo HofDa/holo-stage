@@ -175,6 +175,7 @@ function selectTab(btn, moveFocus = false) {
   });
   document.querySelectorAll('.tab').forEach(t => { t.hidden = t.id !== `tab-${btn.dataset.tab}`; });
   panel.scrollTop = 0;
+  renderClipShelf();
   if (moveFocus) btn.focus();
 }
 tabBtns.forEach((btn, i) => {
@@ -265,7 +266,7 @@ function sceneTitle(sc) {
 }
 const field = (label, control, cls = '') => `<label${cls ? ` class="${cls}"` : ''}>${esc(label)}${control}</label>`;
 const textArea = (k, value, placeholder) => `<textarea data-k="${k}" rows="2" placeholder="${esc(placeholder)}">${esc(value || '')}</textarea>`;
-const clipSelect = (k, value, emptyLabel) => `<select data-k="${k}">${clipOptions(value, emptyLabel)}</select>`;
+const clipSelect = (k, value, emptyLabel) => `<select data-k="${k}" data-clip-slot>${clipOptions(value, emptyLabel)}</select>`;
 const numInput = (k, value, min, max) => `<input data-k="${k}" type="number" min="${min}" max="${max}" step="1" value="${Number(value) || 0}">`;
 
 function sceneFields(sc) {
@@ -335,7 +336,7 @@ function sceneFields(sc) {
     <div class="answers-edit">
       <span class="hint">${esc(t('turnsHint'))}</span>
       <ol class="p-clips">${turnClips}</ol>
-      <select data-add="clips" aria-label="${esc(t('addTurnClipAria'))}"${clips.size ? '' : ' disabled'}>${clipOptions('', t('addTurnClipOption'))}</select>
+      <select data-add="clips" data-clip-slot aria-label="${esc(t('addTurnClipAria'))}"${clips.size ? '' : ' disabled'}>${clipOptions('', t('addTurnClipOption'))}</select>
     </div>`;
 }
 
@@ -556,6 +557,7 @@ function renderPlayers() {
   state.players.forEach((cfg, i) => {
     const node = tpl.content.firstElementChild.cloneNode(true);
     translateDOM(node);
+    node.dataset.i = i;
     const q = s => node.querySelector(s);
     q('details').open = !!openDetails[i];
     q('.p-color').value = cfg.color;
@@ -704,6 +706,7 @@ replaceInput.onchange = async e => {
 function startRename(li, c) {
   const nameEl = li.querySelector('.name');
   if (!nameEl || nameEl.tagName === 'INPUT') return;
+  li.draggable = false;
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'rename';
@@ -754,6 +757,9 @@ function renderLibrary() {
     const dur = durations.has(c.id) ? fmtDur(durations.get(c.id)) : '';
     if (!dur) probeDuration(c);
     const li = document.createElement('li');
+    li.draggable = true;
+    li.dataset.dragClip = c.id;
+    li.title = t('dragClipTitle');
     li.innerHTML = `<button class="icon" data-prev title="${esc(t('previewClip'))}" aria-label="${esc(t('previewClipAria', { name: c.name }))}">${icon('i-play')}</button>
       <span class="name" title="${esc(c.name)}">${esc(c.name)}</span>
       <span class="dur" data-dur="${esc(c.id)}">${dur}</span>
@@ -784,6 +790,7 @@ function renderLibrary() {
     $('#storage').textContent = t('storageUsed', { used: fmtSize(usage), quota: fmtSize(quota) });
   });
   renderBuiltinPacks();
+  renderClipShelf();
   syncDemoButtons();
 }
 
@@ -842,6 +849,9 @@ function renderBuiltinPacks() {
     for (const item of pack.clips) {
       const has = [...clips.values()].some(c => c.name === item.name);
       const li = document.createElement('li');
+      li.draggable = true;
+      li.dataset.dragBuiltin = item.url;
+      li.title = t('dragClipTitle');
       li.innerHTML = `<button class="icon" data-prev title="${esc(t('previewClip'))}" aria-label="${esc(t('previewClipAria', { name: item.name }))}">${icon('i-play')}</button>
         <span class="name" title="${esc(item.name)}">${esc(item.name)}</span>
         <button data-add ${has || offline ? 'disabled' : ''} class="${has ? 'is-added' : ''}">${esc(has ? t('added') : t('addToLibrary'))}</button>`;
@@ -914,6 +924,161 @@ panel.addEventListener('drop', e => {
     : [...e.dataTransfer.files];
   if (files.length) queueFiles(files);
   else notice(t('noticeVideoOnly'), { tone: 'warn' });
+});
+
+/* ---------------------------------------------------------------- drag clips onto slots */
+// Sources: library rows, bundled clips and the clip shelf. Targets: clip pickers, scene
+// headers, free-play clip lists and the four pyramid faces on the stage.
+const CLIP_MIME = 'application/x-holo-clip';
+const isClipDrag = e => !!e.dataTransfer?.types?.includes(CLIP_MIME);
+
+// Compact strip of the library above the Story and Buttons tabs, so a clip can be dragged
+// without switching to Videos.
+function renderClipShelf() {
+  const shelf = document.getElementById('clipShelf');
+  const tab = document.querySelector('.tabs [aria-selected="true"]')?.dataset.tab;
+  const show = clips.size > 0 && (tab === 'story' || tab === 'buttons');
+  shelf.hidden = !show;
+  if (!show) { shelf.innerHTML = ''; return; }
+  shelf.innerHTML = `<span class="shelf-label">${esc(t('clipShelfLabel'))}</span>` + [...clips.values()].map(c =>
+    `<span class="chip" draggable="true" data-drag-clip="${esc(c.id)}" title="${esc(t('dragClipTitle'))}">${esc(c.name)}</span>`).join('');
+}
+
+let dropMark = null;
+function markDrop(el) {
+  if (dropMark === el) return;
+  dropMark?.classList.remove('drop-ok');
+  dropMark = el;
+  el?.classList.add('drop-ok');
+}
+function endClipDrag() {
+  document.body.classList.remove('clip-dragging');
+  markDrop(null);
+  players.forEach(p => p.el.classList.remove('drop-ok'));
+}
+document.addEventListener('dragstart', e => {
+  const src = e.target.closest?.('[data-drag-clip], [data-drag-builtin]');
+  if (!src) return;
+  const payload = src.dataset.dragClip ? { id: src.dataset.dragClip } : { url: src.dataset.dragBuiltin };
+  e.dataTransfer.setData(CLIP_MIME, JSON.stringify(payload));
+  e.dataTransfer.effectAllowed = 'copy';
+  document.body.classList.add('clip-dragging');
+});
+// the source row can be re-rendered mid-drag, so clean up on drop as well as dragend
+document.addEventListener('dragend', endClipDrag);
+document.addEventListener('drop', endClipDrag);
+
+// What a drop on `el` would change, described by meaning (the DOM is re-rendered before it applies).
+function dropSlot(el) {
+  if (!(el instanceof Element) || !panel.contains(el)) return null;
+  const sel = el.closest('select[data-clip-slot]')
+    || el.closest('label')?.querySelector('select[data-clip-slot]')
+    || el.closest('.answers-edit, details.more')?.querySelector('select[data-clip-slot]');
+  if (sel) {
+    const mark = sel.closest('label, .answers-edit, details.more') || sel;
+    if (sel.id === 'sAttract') return { mark, kind: 'attract' };
+    const card = sel.closest('.player');
+    if (card) return { mark, kind: 'player', i: Number(card.dataset.i) };
+    const li = sel.closest('.scene');
+    if (li) return { mark, kind: 'scene', i: Number(li.dataset.i), key: sel.dataset.k || '', add: sel.dataset.add || '' };
+  }
+  const head = el.closest('.scene-head');
+  if (head) return { mark: head, kind: 'scene', i: Number(head.closest('.scene').dataset.i), key: '', add: '' };
+  return null;
+}
+
+// Reads the payload synchronously (it is only readable during the drop event); a bundled
+// clip is imported into the library first.
+async function droppedClip(e) {
+  let p;
+  try { p = JSON.parse(e.dataTransfer.getData(CLIP_MIME)); } catch { return null; }
+  if (p?.id) return clips.has(p.id) ? p.id : null;
+  const item = typeof BUILTIN_PACKS !== 'undefined' && BUILTIN_PACKS.flatMap(pk => pk.clips).find(x => x.url === p?.url);
+  if (!item) return null;
+  const find = () => [...clips.values()].find(c => c.name === item.name)?.id || null;
+  if (!find()) await importBuiltinItems([item]);
+  return find();
+}
+
+function applyDrop(slot, id) {
+  const name = clipName(id);
+  const ok = msg => notice(msg, { tone: 'good', ms: 2600 });
+  if (slot.kind === 'attract') {
+    state.story.attractClip = id;
+    save(); renderStoryMeta();
+    if (Story.phase === 'attract') Story.attract();
+    return ok(t('noticeDropStart', { name }));
+  }
+  if (slot.kind === 'player') {
+    const cfg = state.players[slot.i];
+    if (!cfg) return;
+    cfg.clips = cfg.clips.filter(x => clips.has(x)).concat(id);
+    save(); renderPlayers();
+    if (!Story.running() && (cfg.clips.length === 1 || cfg.mode === 'cycle')) players[slot.i].start();
+    return ok(t('noticeDropPlayer', { name, player: displayPlayerName(cfg, slot.i, state.lang) }));
+  }
+  const sc = state.story.scenes[slot.i];
+  if (!sc) return;
+  if (slot.add) sc[slot.add].push(id);
+  else if (slot.key) sc[slot.key] = id;
+  else { sc[sc.type === 'currents' ? 'successClip' : 'clip'] = id; openScene = slot.i; } // header or stage: open it to show the change
+  storyChanged();
+  ok(t('noticeDropScene', { n: slot.i + 1, name }));
+}
+
+panel.addEventListener('dragover', e => {
+  if (!isClipDrag(e)) return;
+  const slot = dropSlot(e.target);
+  markDrop(slot?.mark || null);
+  if (!slot) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+});
+panel.addEventListener('dragleave', e => {
+  if (isClipDrag(e) && !panel.contains(e.relatedTarget)) markDrop(null);
+});
+panel.addEventListener('drop', async e => {
+  if (!isClipDrag(e)) return;
+  e.preventDefault();
+  const slot = dropSlot(e.target);
+  const pending = droppedClip(e);
+  endClipDrag();
+  const id = slot && await pending;
+  if (id) applyDrop(slot, id);
+});
+
+// Hovering a tab while dragging opens it, so a clip from Videos can reach the Story or Buttons tab.
+let tabDragTimer;
+tabBtns.forEach(btn => {
+  btn.addEventListener('dragenter', e => {
+    if (!isClipDrag(e) || btn.getAttribute('aria-selected') === 'true') return;
+    clearTimeout(tabDragTimer);
+    tabDragTimer = setTimeout(() => selectTab(btn), 450);
+  });
+  btn.addEventListener('dragleave', () => clearTimeout(tabDragTimer));
+});
+
+// The pyramid faces: in a story, a drop sets the clip of the scene being edited (or the start
+// screen); in free play it adds the clip to that face's player.
+players.forEach((p, i) => {
+  p.el.addEventListener('dragover', e => {
+    if (!isClipDrag(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    p.el.classList.add('drop-ok');
+  });
+  p.el.addEventListener('dragleave', e => { if (!p.el.contains(e.relatedTarget)) p.el.classList.remove('drop-ok'); });
+  p.el.addEventListener('drop', async e => {
+    if (!isClipDrag(e)) return;
+    e.preventDefault();
+    const slot = !Story.running() ? { kind: 'player', i }
+      : openScene >= 0 ? { kind: 'scene', i: openScene, key: '', add: '' }
+        : { kind: 'attract' };
+    const pending = droppedClip(e);
+    endClipDrag();
+    const id = await pending;
+    if (id) applyDrop(slot, id);
+  });
 });
 
 // Demo content: a short volcano story that uses every kind of scene.
